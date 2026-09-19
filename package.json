@@ -22,5 +22,9 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "npm@10"
+  "packageManager": "npm@10",
+  "dependencies": {
+    "@supabase/auth-js": "^2.116.0",
+    "react-native-url-polyfill": "^4.0.0"
+  }
 }

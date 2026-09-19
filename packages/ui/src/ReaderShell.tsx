@@ -76,6 +76,8 @@ export function ReaderShell({
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [nameFieldFocused, setNameFieldFocused] = useState(false);
   const [caretVisible, setCaretVisible] = useState(true);
+  const [toggleHovered, setToggleHovered] = useState(false);
+  const toggleHoverProgress = useRef(new Animated.Value(0)).current;
   const [selectionStart, setSelectionStart] = useState(0);
   const [caretTextWidth, setCaretTextWidth] = useState(0);
   const [editingFileName, setEditingFileName] = useState(
@@ -120,6 +122,15 @@ export function ReaderShell({
 
   const toggleSidebar = () => {
     setSidebarVisible(visible => !visible);
+  };
+
+  const setToggleHover = (value: boolean) => {
+    setToggleHovered(value);
+    Animated.timing(toggleHoverProgress, {
+      toValue: value ? 1 : 0,
+      duration: value ? 650 : 450,
+      useNativeDriver: true,
+    }).start();
   };
 
   return (
@@ -185,7 +196,7 @@ export function ReaderShell({
                   pointerEvents="none"
                   style={[
                     styles.customCaret,
-                    {left: 10 + caretTextWidth, opacity: caretVisible ? 1 : 0},
+                    {left: 12 + caretTextWidth, opacity: caretVisible ? 1 : 0},
                   ]}
                 />
               ) : null}
@@ -220,10 +231,24 @@ export function ReaderShell({
           accessibilityLabel={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
           accessibilityRole="button"
           onPress={toggleSidebar}
+          onHoverIn={() => setToggleHover(true)}
+          onHoverOut={() => setToggleHover(false)}
           style={({pressed}) => [
             styles.revealButton,
-            pressed && styles.pressed,
+            toggleHovered && styles.toggleHovered,
           ]}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.toggleHoverFill,
+              {
+                opacity: toggleHoverProgress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 1],
+                }),
+              },
+            ]}
+          />
           <Text style={styles.revealLabel}>{sidebarVisible ? '‹' : '›'}</Text>
         </Pressable>
       </Animated.View>
@@ -272,17 +297,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: RAIL_WIDTH + 10,
     bottom: 12,
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: theme.railBg,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#8BB5F2',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: {width: 0, height: 3},
     zIndex: 30,
+    overflow: 'hidden',
   },
   sidebarLayer: {
     position: 'absolute',
@@ -290,7 +318,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: RAIL_WIDTH,
-    backgroundColor: theme.railBg,
     zIndex: 10,
   },
   fileNameBar: {
@@ -306,7 +333,7 @@ const styles = StyleSheet.create({
   },
   fileNameInput: {
     color: theme.textPrimary,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
     borderColor: '#A1A1A6',
     borderWidth: 1,
     borderRadius: 6,
@@ -327,7 +354,7 @@ const styles = StyleSheet.create({
   },
   fileExtension: {
     color: theme.textSecondary,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
     fontSize: 13,
     minHeight: 30,
     paddingRight: 8,
@@ -345,16 +372,24 @@ const styles = StyleSheet.create({
   customCaret: {
     position: 'absolute',
     top: 7,
-    width: 2,
+    width: 1,
     height: 17,
     backgroundColor: '#000000',
   },
   revealLabel: {
-    color: '#F5F5F7',
-    fontSize: 20,
+    color: theme.accent,
+    fontSize: 22,
     fontWeight: '600',
     lineHeight: 22,
     marginTop: -1,
+  },
+  toggleHoverFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(45, 127, 249, 0.24)',
+  },
+  toggleHovered: {
+    borderColor: '#4B91E7',
+    backgroundColor: '#EAF3FF',
   },
   pressed: {
     opacity: 0.85,
