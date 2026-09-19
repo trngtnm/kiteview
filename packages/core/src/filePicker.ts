@@ -10,9 +10,16 @@ export type RenamePdfFileFn = (
   uri: string,
   name: string,
 ) => Promise<PickedPdfFile>;
+export type AnnotatePhraseFn = (
+  endpoint: string,
+  anonKey: string,
+  phrase: string,
+  pageNumber?: number,
+) => Promise<unknown>;
 
 let pickPdfFileImpl: PickPdfFileFn | null = null;
 let renamePdfFileImpl: RenamePdfFileFn | null = null;
+let annotatePhraseImpl: AnnotatePhraseFn | null = null;
 
 /** Register the platform-specific PDF picker (e.g. NSOpenPanel on macOS). */
 export function registerPickPdfFile(fn: PickPdfFileFn): void {
@@ -21,6 +28,22 @@ export function registerPickPdfFile(fn: PickPdfFileFn): void {
 
 export function registerRenamePdfFile(fn: RenamePdfFileFn): void {
   renamePdfFileImpl = fn;
+}
+
+export function registerAnnotatePhrase(fn: AnnotatePhraseFn): void {
+  annotatePhraseImpl = fn;
+}
+
+export function annotatePhrase(
+  endpoint: string,
+  anonKey: string,
+  phrase: string,
+  pageNumber?: number,
+): Promise<unknown> {
+  if (!annotatePhraseImpl) {
+    throw new Error('Native phrase annotation is not registered');
+  }
+  return annotatePhraseImpl(endpoint, anonKey, phrase, pageNumber);
 }
 
 export async function pickPdfFile(): Promise<PickedPdfFile | null> {

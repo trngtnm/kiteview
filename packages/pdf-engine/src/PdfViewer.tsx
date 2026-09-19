@@ -10,6 +10,8 @@ type WebViewMessage = {
   message?: string;
   word?: string;
   pageNumber?: number;
+  phrase?: string;
+  content?: string;
 };
 
 /**
@@ -23,6 +25,11 @@ export function PdfViewer({
   onPageCount,
   onError,
   onWordClick,
+  onPhraseSelect,
+  onPhraseAnnotation,
+  onPhraseAnnotationError,
+  gptEndpointUrl,
+  supabaseAnonKey,
 }: PdfViewerProps) {
   const dataUri = useMemo(() => {
     if (base64) {
@@ -35,8 +42,11 @@ export function PdfViewer({
   }, [base64, sourceUri]);
 
   const html = useMemo(
-    () => (dataUri ? buildPdfViewerHtml(dataUri) : null),
-    [dataUri],
+    () =>
+      dataUri
+        ? buildPdfViewerHtml(dataUri, gptEndpointUrl, supabaseAnonKey)
+        : null,
+    [dataUri, gptEndpointUrl, supabaseAnonKey],
   );
 
   if (!html) {
@@ -74,6 +84,27 @@ export function PdfViewer({
               typeof data.pageNumber === 'number'
             ) {
               onWordClick?.(data.word, data.pageNumber);
+            }
+            if (
+              data.type === 'phraseSelect' &&
+              typeof data.phrase === 'string' &&
+              typeof data.pageNumber === 'number'
+            ) {
+              onPhraseSelect?.(data.phrase, data.pageNumber);
+            }
+            if (
+              data.type === 'phraseAnnotation' &&
+              typeof data.phrase === 'string' &&
+              typeof data.content === 'string'
+            ) {
+              onPhraseAnnotation?.(data.phrase, data.content);
+            }
+            if (
+              data.type === 'phraseAnnotationError' &&
+              typeof data.phrase === 'string' &&
+              typeof data.message === 'string'
+            ) {
+              onPhraseAnnotationError?.(data.phrase, data.message);
             }
           } catch {
             // ignore malformed messages

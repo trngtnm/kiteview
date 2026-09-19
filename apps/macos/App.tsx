@@ -6,13 +6,15 @@
 import React, {useCallback} from 'react';
 import {Alert} from 'react-native';
 import {
+  getEnv,
   pickPdfFile,
   renamePdfFile,
   useDefinitionStore,
   useDocumentStore,
+  useParaphraseStore,
 } from '@kiteview/core';
 import {PdfViewer} from '@kiteview/pdf-engine';
-import {DefinitionPanel, ReaderShell} from '@kiteview/ui';
+import {DefinitionPanel, ParaphrasePanel, ReaderShell} from '@kiteview/ui';
 import {bootstrapEnv} from './src/bootstrapEnv';
 import {registerMacosPdfPicker} from './src/registerMacosPdfPicker';
 
@@ -36,6 +38,16 @@ function App() {
   const error = useDefinitionStore(s => s.error);
   const requestDefinition = useDefinitionStore(s => s.requestDefinition);
   const clearDefinition = useDefinitionStore(s => s.clearDefinition);
+
+  const activePhrase = useParaphraseStore(s => s.activePhrase);
+  const paraphraseStatus = useParaphraseStore(s => s.status);
+  const paraphraseAnnotation = useParaphraseStore(s => s.annotation);
+  const paraphraseError = useParaphraseStore(s => s.error);
+  const requestParaphrase = useParaphraseStore(s => s.requestParaphrase);
+  const beginParaphrase = useParaphraseStore(s => s.beginParaphrase);
+  const receiveParaphrase = useParaphraseStore(s => s.receiveParaphrase);
+  const failParaphrase = useParaphraseStore(s => s.failParaphrase);
+  const clearParaphrase = useParaphraseStore(s => s.clearParaphrase);
 
   const onSelectFile = useCallback(async () => {
     try {
@@ -89,10 +101,31 @@ function App() {
 
   const onWordClick = useCallback(
     (word: string) => {
+      clearParaphrase();
       void requestDefinition(word);
     },
-    [requestDefinition],
+    [clearParaphrase, requestDefinition],
   );
+
+  const onPhraseSelect = useCallback(
+    (phrase: string, pageNumber: number) => {
+      clearDefinition();
+      void requestParaphrase(phrase, pageNumber);
+    },
+    [clearDefinition, requestParaphrase],
+  );
+
+  const onPhraseAnnotation = useCallback(
+    (phrase: string, content: string) => receiveParaphrase(phrase, content),
+    [receiveParaphrase],
+  );
+
+  const onPhraseAnnotationError = useCallback(
+    (phrase: string, message: string) => failParaphrase(phrase, message),
+    [failParaphrase],
+  );
+
+  const env = getEnv();
 
   return (
     <ReaderShell
@@ -107,19 +140,34 @@ function App() {
       onRenameFile={renameFile}
       onSaveFile={onSaveFile}
       leftGutter={
-        <DefinitionPanel
-          word={activeWord}
-          status={status}
-          definition={definition}
-          error={error}
-          onClose={clearDefinition}
-        />
+        activePhrase ? (
+          <ParaphrasePanel
+            phrase={activePhrase}
+            status={paraphraseStatus}
+            annotation={paraphraseAnnotation}
+            error={paraphraseError}
+            onClose={clearParaphrase}
+          />
+        ) : (
+          <DefinitionPanel
+            word={activeWord}
+            status={status}
+            definition={definition}
+            error={error}
+            onClose={clearDefinition}
+          />
+        )
       }>
       {file ? (
         <PdfViewer
           sourceUri={file.uri}
           base64={file.base64}
           onWordClick={onWordClick}
+          onPhraseSelect={onPhraseSelect}
+          onPhraseAnnotation={onPhraseAnnotation}
+          onPhraseAnnotationError={onPhraseAnnotationError}
+          gptEndpointUrl={env.gptEndpointUrl}
+          supabaseAnonKey={env.supabaseAnonKey}
           onError={message => Alert.alert('PDF error', message)}
         />
       ) : null}

@@ -1,7 +1,9 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {
   Animated,
+  findNodeHandle,
   ImageSourcePropType,
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -61,9 +63,13 @@ export function ReaderShell({
   const hasDocument = Boolean(children);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [nameFieldFocused, setNameFieldFocused] = useState(false);
+  const [caretVisible, setCaretVisible] = useState(true);
+  const [selectionStart, setSelectionStart] = useState(0);
+  const [caretTextWidth, setCaretTextWidth] = useState(0);
   const [editingFileName, setEditingFileName] = useState(
     fileName?.replace(/\.pdf$/i, '') ?? '',
   );
+  const nameInputRef = useRef<TextInput>(null);
   const sidebarOffset = useRef(new Animated.Value(0)).current;
   const readerOffset = sidebarOffset.interpolate({
     inputRange: [-RAIL_WIDTH, 0],
@@ -72,6 +78,7 @@ export function ReaderShell({
 
   useEffect(() => {
     setEditingFileName(fileName?.replace(/\.pdf$/i, '') ?? '');
+    setSelectionStart(0);
   }, [fileName]);
 
   useEffect(() => {
@@ -86,6 +93,17 @@ export function ReaderShell({
     return () => animation.stop();
   }, [sidebarOffset, sidebarVisible]);
 
+  useEffect(() => {
+    if (!nameFieldFocused) {
+      return;
+    }
+    setCaretVisible(true);
+    const blinkTimer = setInterval(() => {
+      setCaretVisible(visible => !visible);
+    }, 530);
+    return () => clearInterval(blinkTimer);
+  }, [nameFieldFocused]);
+
   const toggleSidebar = () => {
     setSidebarVisible(visible => !visible);
   };
@@ -93,6 +111,14 @@ export function ReaderShell({
   return (
     <KeyboardSurface
       style={styles.window}
+      onTouchEnd={(event: any) => {
+        const inputTarget = nameInputRef.current
+          ? Number(findNodeHandle(nameInputRef.current))
+          : null;
+        if (inputTarget == null || event.nativeEvent.target !== inputTarget) {
+          Keyboard.dismiss();
+        }
+      }}
       onKeyDown={(event: any) => {
         if ((event.metaKey || event.ctrlKey) && event.key?.toLowerCase() === 's') {
           event.preventDefault?.();
@@ -117,22 +143,45 @@ export function ReaderShell({
         </Animated.View>
         {fileName ? (
           <View style={styles.fileNameBar}>
-            <TextInput
-              accessibilityLabel="PDF name"
-              onBlur={() => setNameFieldFocused(false)}
-              onChangeText={value => setEditingFileName(value)}
-              onFocus={() => setNameFieldFocused(true)}
-              onSubmitEditing={() => onSaveFile(editingFileName.trim())}
-              placeholder="PDF name"
-              caretHidden={false}
-              cursorColor="#000000"
-              selectionColor="#B9D9FF"
-              style={[
-                styles.fileNameInput,
-                nameFieldFocused && styles.fileNameInputFocused,
-              ]}
-              value={editingFileName}
-            />
+            <View style={styles.inputShell}>
+              <TextInput
+                ref={nameInputRef}
+                accessibilityLabel="PDF name"
+                onBlur={() => setNameFieldFocused(false)}
+                onChangeText={value => {
+                  setEditingFileName(value);
+                  setSelectionStart(value.length);
+                }}
+                onFocus={() => setNameFieldFocused(true)}
+                onSelectionChange={event =>
+                  setSelectionStart(event.nativeEvent.selection.start)
+                }
+                onSubmitEditing={() => onSaveFile(editingFileName.trim())}
+                placeholder="PDF name"
+                caretHidden={false}
+                cursorColor="#000000"
+                selectionColor="#000000"
+                style={[
+                  styles.fileNameInput,
+                  nameFieldFocused && styles.fileNameInputFocused,
+                ]}
+                value={editingFileName}
+              />
+              {nameFieldFocused ? (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.customCaret,
+                    {left: 10 + caretTextWidth, opacity: caretVisible ? 1 : 0},
+                  ]}
+                />
+              ) : null}
+              <Text
+                onLayout={event => setCaretTextWidth(event.nativeEvent.layout.width)}
+                style={styles.caretMeasure}>
+                {editingFileName.slice(0, selectionStart)}
+              </Text>
+            </View>
             <Text style={styles.fileExtension}>.pdf</Text>
           </View>
         ) : null}
@@ -250,10 +299,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     minHeight: 30,
     flex: 1,
+    width: '100%',
+  },
+  inputShell: {
+    flex: 1,
+    position: 'relative',
   },
   fileNameInputFocused: {
-    borderColor: '#FF8A00',
-    borderWidth: 2,
+    borderColor: theme.accent,
+    borderWidth: 1,
   },
   fileExtension: {
     color: theme.textSecondary,
@@ -263,6 +317,21 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     paddingVertical: 6,
     marginLeft: -4,
+  },
+  caretMeasure: {
+    position: 'absolute',
+    left: 10,
+    top: 7,
+    opacity: 0,
+    color: theme.textPrimary,
+    fontSize: 13,
+  },
+  customCaret: {
+    position: 'absolute',
+    top: 7,
+    width: 2,
+    height: 17,
+    backgroundColor: '#000000',
   },
   revealLabel: {
     color: '#F5F5F7',

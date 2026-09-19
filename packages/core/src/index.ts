@@ -5,6 +5,8 @@ export {
   registerPickPdfFile,
   renamePdfFile,
   registerRenamePdfFile,
+  registerAnnotatePhrase,
+  annotatePhrase,
 } from './filePicker';
 export type {
   PickedPdfFile,
@@ -17,3 +19,7 @@ export {fetchWordDefinition} from './dictionary';
 export type {WordDefinition, WordMeaning} from './dictionary';
 export {useDefinitionStore} from './definitionStore';
 export type {DefinitionStatus} from './definitionStore';
+export {fetchPhraseAnnotation} from './paraphrase';
+export type {PhraseAnnotation} from './paraphrase';
+export {useParaphraseStore} from './paraphraseStore';
+export type {ParaphraseStatus} from './paraphraseStore';
