@@ -11,11 +11,8 @@ import {
   renamePdfFile,
   useDefinitionStore,
   useDocumentStore,
-  useParaphraseStore,
-} from '@kiteview/core';
-import {PdfViewer} from '@kiteview/pdf-engine';
-import {DefinitionPanel, ParaphrasePanel, ReaderShell} from '@kiteview/ui';
   useFormAnalysisStore,
+  useParaphraseStore,
 } from '@kiteview/core';
 import {
   PdfViewer,
@@ -26,6 +23,7 @@ import {
 import {
   DefinitionPanel,
   FormFieldsPanel,
+  ParaphrasePanel,
   ReaderShell,
 } from '@kiteview/ui';
 import {bootstrapEnv} from './src/bootstrapEnv';
@@ -62,7 +60,6 @@ function App() {
   const paraphraseAnnotation = useParaphraseStore(s => s.annotation);
   const paraphraseError = useParaphraseStore(s => s.error);
   const requestParaphrase = useParaphraseStore(s => s.requestParaphrase);
-  const beginParaphrase = useParaphraseStore(s => s.beginParaphrase);
   const receiveParaphrase = useParaphraseStore(s => s.receiveParaphrase);
   const failParaphrase = useParaphraseStore(s => s.failParaphrase);
   const clearParaphrase = useParaphraseStore(s => s.clearParaphrase);
@@ -298,13 +295,6 @@ function App() {
             onClose={clearDefinition}
           />
         )
-        <DefinitionPanel
-          word={activeWord}
-          status={status}
-          definition={definition}
-          error={error}
-          onClose={clearDefinition}
-        />
       }
       rightGutter={
         file && formStatus !== 'idle' ? (
@@ -319,7 +309,7 @@ function App() {
       }>
       {file ? (
         <PdfViewer
-          ref={pdfRef}
+          viewerRef={pdfRef}
           sourceUri={file.uri}
           base64={file.base64}
           formFields={showFormOverlays ? formFields : undefined}
