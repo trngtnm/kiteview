@@ -10,6 +10,9 @@
     "build": "echo 'no-op'"
   },
   "dependencies": {
+    "@kiteview/pdf-engine": "*",
+    "@supabase/supabase-js": "^2.116.0",
+    "react-native-url-polyfill": "^4.0.0",
     "zustand": "^5.0.5"
   },
   "peerDependencies": {

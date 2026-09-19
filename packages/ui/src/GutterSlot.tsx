@@ -10,16 +10,18 @@ type GutterSlotProps = {
 
 /**
  * Side margin next to the PDF column.
- * Left gutter hosts the definition panel and clips overflow so it cannot cover the PDF.
+ * Left: definitions; right: form fields after opt-in detect.
  */
 export function GutterSlot({side, style, children}: GutterSlotProps) {
   const isLeft = side === 'left';
+  const isRight = side === 'right';
   return (
     <View
       accessibilityLabel={`${side} annotation gutter`}
       style={[
         styles.gutter,
         isLeft && styles.leftGutter,
+        isRight && styles.rightGutter,
         style,
       ]}>
       {children}
@@ -34,6 +36,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.gutterBg,
   },
   leftGutter: {
+    alignItems: 'stretch',
+    overflow: 'hidden',
+  },
+  rightGutter: {
     alignItems: 'stretch',
     overflow: 'hidden',
   },

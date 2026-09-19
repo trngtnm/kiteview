@@ -20,6 +20,10 @@ type SidebarRailProps = {
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
   onClearFile?: () => void;
+  onDetectForms?: () => void;
+  formsDetectLabel?: string;
+  formsDetectDisabled?: boolean;
+  formFieldCount?: number;
 };
 
 export function SidebarRail({
@@ -31,6 +35,10 @@ export function SidebarRail({
   onSelectTab,
   onCloseTab,
   onClearFile,
+  onDetectForms,
+  formsDetectLabel = 'Detect forms',
+  formsDetectDisabled,
+  formFieldCount,
 }: SidebarRailProps) {
   return (
     <View style={styles.rail}>
@@ -83,6 +91,28 @@ export function SidebarRail({
           <Text style={styles.clear} onPress={onClearFile}>
             Close
           </Text>
+        ) : null}
+
+        {tabs.length > 0 && onDetectForms ? (
+          <View style={styles.formsBlock}>
+            <Text style={styles.section}>Forms</Text>
+            <Pressable
+              accessibilityRole="button"
+              disabled={formsDetectDisabled}
+              onPress={onDetectForms}
+              style={({pressed}) => [
+                styles.detectButton,
+                formsDetectDisabled && styles.detectDisabled,
+                pressed && !formsDetectDisabled && styles.pressed,
+              ]}>
+              <Text style={styles.detectLabel}>{formsDetectLabel}</Text>
+            </Pressable>
+            {typeof formFieldCount === 'number' ? (
+              <Text style={styles.formsMeta}>
+                {formFieldCount} field{formFieldCount === 1 ? '' : 's'} found
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </View>
     </View>
@@ -167,5 +197,29 @@ const styles = StyleSheet.create({
     color: theme.accent,
     fontSize: 13,
     fontWeight: '500',
+  },
+  formsBlock: {
+    marginTop: 28,
+  },
+  detectButton: {
+    alignSelf: 'stretch',
+    backgroundColor: theme.accent,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  detectDisabled: {
+    opacity: 0.45,
+  },
+  detectLabel: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  formsMeta: {
+    marginTop: 8,
+    color: '#8E8E93',
+    fontSize: 12,
   },
 });
