@@ -6,10 +6,15 @@
 import React, {useCallback, useEffect, useRef} from 'react';
 import {Alert, InteractionManager} from 'react-native';
 import {
+  getEnv,
   pickPdfFile,
   renamePdfFile,
   useDefinitionStore,
   useDocumentStore,
+  useParaphraseStore,
+} from '@kiteview/core';
+import {PdfViewer} from '@kiteview/pdf-engine';
+import {DefinitionPanel, ParaphrasePanel, ReaderShell} from '@kiteview/ui';
   useFormAnalysisStore,
 } from '@kiteview/core';
 import {
@@ -52,6 +57,15 @@ function App() {
   const requestDefinition = useDefinitionStore(s => s.requestDefinition);
   const clearDefinition = useDefinitionStore(s => s.clearDefinition);
 
+  const activePhrase = useParaphraseStore(s => s.activePhrase);
+  const paraphraseStatus = useParaphraseStore(s => s.status);
+  const paraphraseAnnotation = useParaphraseStore(s => s.annotation);
+  const paraphraseError = useParaphraseStore(s => s.error);
+  const requestParaphrase = useParaphraseStore(s => s.requestParaphrase);
+  const beginParaphrase = useParaphraseStore(s => s.beginParaphrase);
+  const receiveParaphrase = useParaphraseStore(s => s.receiveParaphrase);
+  const failParaphrase = useParaphraseStore(s => s.failParaphrase);
+  const clearParaphrase = useParaphraseStore(s => s.clearParaphrase);
   const formStatus = useFormAnalysisStore(s => s.status);
   const formFields = useFormAnalysisStore(s => s.fields);
   const selectedFieldId = useFormAnalysisStore(s => s.selectedFieldId);
@@ -167,11 +181,31 @@ function App() {
 
   const onWordClick = useCallback(
     (word: string) => {
+      clearParaphrase();
       void requestDefinition(word);
     },
-    [requestDefinition],
+    [clearParaphrase, requestDefinition],
   );
 
+  const onPhraseSelect = useCallback(
+    (phrase: string, pageNumber: number) => {
+      clearDefinition();
+      void requestParaphrase(phrase, pageNumber);
+    },
+    [clearDefinition, requestParaphrase],
+  );
+
+  const onPhraseAnnotation = useCallback(
+    (phrase: string, content: string) => receiveParaphrase(phrase, content),
+    [receiveParaphrase],
+  );
+
+  const onPhraseAnnotationError = useCallback(
+    (phrase: string, message: string) => failParaphrase(phrase, message),
+    [failParaphrase],
+  );
+
+  const env = getEnv();
   const onPageReady = useCallback(
     (pageNumber: number) => {
       if (pageNumber === 1) {
@@ -247,6 +281,23 @@ function App() {
       onRenameFile={renameFile}
       onSaveFile={onSaveFile}
       leftGutter={
+        activePhrase ? (
+          <ParaphrasePanel
+            phrase={activePhrase}
+            status={paraphraseStatus}
+            annotation={paraphraseAnnotation}
+            error={paraphraseError}
+            onClose={clearParaphrase}
+          />
+        ) : (
+          <DefinitionPanel
+            word={activeWord}
+            status={status}
+            definition={definition}
+            error={error}
+            onClose={clearDefinition}
+          />
+        )
         <DefinitionPanel
           word={activeWord}
           status={status}
@@ -274,6 +325,11 @@ function App() {
           formFields={showFormOverlays ? formFields : undefined}
           selectedFieldId={selectedFieldId}
           onWordClick={onWordClick}
+          onPhraseSelect={onPhraseSelect}
+          onPhraseAnnotation={onPhraseAnnotation}
+          onPhraseAnnotationError={onPhraseAnnotationError}
+          gptEndpointUrl={env.gptEndpointUrl}
+          supabaseAnonKey={env.supabaseAnonKey}
           onPageReady={onPageReady}
           onFormFieldClick={selectFormField}
           onFormFieldChange={setFieldValue}

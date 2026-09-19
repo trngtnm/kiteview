@@ -104,4 +104,55 @@ RCT_EXPORT_METHOD(renamePdf:(NSString *)uri
   });
 }
 
+RCT_EXPORT_METHOD(annotatePhrase:(NSString *)endpoint
+                  anonKey:(NSString *)anonKey
+                  phrase:(NSString *)phrase
+                  pageNumber:(NSNumber *)pageNumber
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+  NSURL *url = [NSURL URLWithString:endpoint];
+  if (url == nil || anonKey.length == 0 || phrase.length == 0) {
+    reject(@"invalid_request", @"GPT endpoint configuration is invalid", nil);
+    return;
+  }
+  NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+  request.HTTPMethod = @"POST";
+  [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+  [request setValue:[NSString stringWithFormat:@"Bearer %@", anonKey] forHTTPHeaderField:@"Authorization"];
+  [request setValue:anonKey forHTTPHeaderField:@"apikey"];
+  NSDictionary *body = @{
+    @"selection_text": phrase,
+    @"text": phrase,
+    @"page_number": pageNumber ?: @0,
+    @"annotation_type": @"paraphrase",
+    @"instruction": @"Explain the selected phrase in clear layman terms and briefly describe what it means in context.",
+  };
+  NSError *serializationError = nil;
+  request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:&serializationError];
+  if (serializationError != nil) {
+    reject(@"serialization_failed", serializationError.localizedDescription, serializationError);
+    return;
+  }
+  [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    if (error != nil) {
+      reject(@"network_failed", error.localizedDescription ?: @"GPT request failed", error);
+      return;
+    }
+    NSInteger status = [(NSHTTPURLResponse *)response statusCode];
+    NSError *jsonError = nil;
+    id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError] : nil;
+    if (status < 200 || status >= 300) {
+      NSString *message = [json isKindOfClass:[NSDictionary class]] ? json[@"message"] : nil;
+      reject(@"request_failed", message ?: [NSString stringWithFormat:@"GPT request failed (%ld)", (long)status], jsonError);
+      return;
+    }
+    if (jsonError != nil || json == nil) {
+      reject(@"invalid_response", @"GPT returned invalid JSON", jsonError);
+      return;
+    }
+    resolve(json);
+  }] resume];
+}
+
 @end

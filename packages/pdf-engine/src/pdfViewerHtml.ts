@@ -7,8 +7,14 @@
  */
 const PAGE_MAX_WIDTH = 820;
 
-export function buildPdfViewerHtml(pdfDataUri: string): string {
+export function buildPdfViewerHtml(
+  pdfDataUri: string,
+  gptEndpointUrl = '',
+  supabaseAnonKey = '',
+): string {
   const safeUri = pdfDataUri.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const safeGptEndpoint = gptEndpointUrl.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const safeAnonKey = supabaseAnonKey.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
   return `<!DOCTYPE html>
 <html>
@@ -229,6 +235,74 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       post({ type: 'wordClick', word: cleaned, pageNumber });
     }
 
+    function postJsonWithXhr(url, headers, body) {
+      return new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open('POST', url, true);
+        Object.entries(headers).forEach(([key, value]) => request.setRequestHeader(key, value));
+        request.onload = () => resolve({status: request.status, text: request.responseText});
+        request.onerror = () => reject(new Error('GPT request could not reach the endpoint'));
+        request.send(body);
+      });
+    }
+
+    async function requestPhraseAnnotation(phrase, pageNumber) {
+      if (!'${safeGptEndpoint}' || !'${safeAnonKey}') {
+        post({type: 'phraseAnnotationError', phrase, message: 'GPT endpoint is not configured'});
+        return;
+      }
+      const instruction = 'Explain the selected phrase in clear layman terms and briefly describe what it means in context.';
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ${safeAnonKey}',
+        apikey: '${safeAnonKey}',
+      };
+      const body = JSON.stringify({
+        selection_text: phrase,
+        text: phrase,
+        page_number: pageNumber,
+        annotation_type: 'paraphrase',
+        instruction,
+        prompt: instruction + '\\n\\nSelected phrase: ' + phrase,
+        messages: [
+          {role: 'system', content: instruction},
+          {role: 'user', content: phrase},
+        ],
+      });
+      try {
+        let result;
+        try {
+          const response = await fetch('${safeGptEndpoint}', {method: 'POST', headers, body});
+          result = {status: response.status, text: await response.text()};
+        } catch {
+          result = await postJsonWithXhr('${safeGptEndpoint}', headers, body);
+        }
+        const data = JSON.parse(result.text);
+        if (result.status < 200 || result.status >= 300) throw new Error(data.message || 'GPT request failed (' + result.status + ')');
+        const content = data.paraphrase || data.explanation || data.content || data.result || data.choices?.[0]?.message?.content;
+        if (!content) throw new Error('The GPT endpoint returned no paraphrase content');
+        post({type: 'phraseAnnotation', phrase, content: String(content).trim()});
+      } catch (error) {
+        post({type: 'phraseAnnotationError', phrase, message: String(error && error.message ? error.message : error)});
+      }
+    }
+
+    let selectionTimer = null;
+    document.addEventListener('selectionchange', () => {
+      if (selectionTimer) clearTimeout(selectionTimer);
+      selectionTimer = setTimeout(() => {
+        const selection = window.getSelection();
+        const phrase = selection ? selection.toString().trim() : '';
+        if (!phrase || phrase.split(/\s+/).length < 2 || !selection?.anchorNode) {
+          return;
+        }
+        const page = selection.anchorNode.parentElement?.closest('.page');
+        const pageNumber = page ? Array.from(viewer.children).indexOf(page) + 1 : 0;
+        if (pageNumber > 0) {
+          post({type: 'phraseSelect', phrase, pageNumber});
+        }
+      }, 80);
+    });
     function paintFormOverlays() {
       pageEls.forEach((pageEl) => {
         let overlay = pageEl.querySelector('.formOverlay');

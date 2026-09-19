@@ -23,6 +23,8 @@ type WebViewMessage = {
   message?: string;
   word?: string;
   pageNumber?: number;
+  phrase?: string;
+  content?: string;
   id?: string;
   value?: string;
   fields?: DetectedFormField[];
@@ -37,35 +39,35 @@ function inject(webRef: React.RefObject<WebViewType | null>, script: string) {
  * Continuous-scroll PDF viewer powered by pdf.js (CDN) inside a WKWebView.
  * Form overlays are applied after load via injectJavaScript — never rebuild HTML.
  */
-export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
-  function PdfViewer(
-    {
-      sourceUri,
-      base64,
-      onPageCount,
-      onPageReady,
-      onError,
-      onWordClick,
-      formFields,
-      selectedFieldId,
-      onFormFieldClick,
-      onFormFieldChange,
-      onHeuristicFields,
-      onFormPageImages,
-    },
-    ref,
-  ) {
-    const webRef = useRef<WebViewType>(null);
+export function PdfViewer({
+  sourceUri,
+  base64,
+  onPageCount,
+  onError,
+  onWordClick,
+  onPhraseSelect,
+  onPhraseAnnotation,
+  onPhraseAnnotationError,
+  gptEndpointUrl,
+  supabaseAnonKey,
+}: PdfViewerProps) {
+  const dataUri = useMemo(() => {
+    if (base64) {
+      return `data:application/pdf;base64,${base64}`;
+    }
+    if (sourceUri.startsWith('data:')) {
+      return sourceUri;
+    }
+    return null;
+  }, [base64, sourceUri]);
 
-    const dataUri = useMemo(() => {
-      if (base64) {
-        return `data:application/pdf;base64,${base64}`;
-      }
-      if (sourceUri.startsWith('data:')) {
-        return sourceUri;
-      }
-      return null;
-    }, [base64, sourceUri]);
+  const html = useMemo(
+    () =>
+      dataUri
+        ? buildPdfViewerHtml(dataUri, gptEndpointUrl, supabaseAnonKey)
+        : null,
+    [dataUri, gptEndpointUrl, supabaseAnonKey],
+  );
 
     const html = useMemo(
       () => (dataUri ? buildPdfViewerHtml(dataUri) : null),
@@ -170,15 +172,38 @@ export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
             } catch {
               // ignore malformed messages
             }
-          }}
-          onError={syntheticEvent => {
-            onError?.(syntheticEvent.nativeEvent.description);
-          }}
-        />
-      </View>
-    );
-  },
-);
+            if (
+              data.type === 'phraseSelect' &&
+              typeof data.phrase === 'string' &&
+              typeof data.pageNumber === 'number'
+            ) {
+              onPhraseSelect?.(data.phrase, data.pageNumber);
+            }
+            if (
+              data.type === 'phraseAnnotation' &&
+              typeof data.phrase === 'string' &&
+              typeof data.content === 'string'
+            ) {
+              onPhraseAnnotation?.(data.phrase, data.content);
+            }
+            if (
+              data.type === 'phraseAnnotationError' &&
+              typeof data.phrase === 'string' &&
+              typeof data.message === 'string'
+            ) {
+              onPhraseAnnotationError?.(data.phrase, data.message);
+            }
+          } catch {
+            // ignore malformed messages
+          }
+        }}
+        onError={syntheticEvent => {
+          onError?.(syntheticEvent.nativeEvent.description);
+        }}
+      />
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {
