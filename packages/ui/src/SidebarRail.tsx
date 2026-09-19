@@ -37,7 +37,7 @@ export function SidebarRail({
   onCloseTab,
   onClearFile,
   onDetectForms,
-  formsDetectLabel = 'Detect forms',
+  formsDetectLabel = 'AI scan',
   formsDetectDisabled,
   formFieldCount,
 }: SidebarRailProps) {

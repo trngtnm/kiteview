@@ -16,9 +16,11 @@ link_pkg() {
   fi
 }
 
-for pkg in react-native react-native-macos react react-native-webview react-native-safe-area-context; do
+for pkg in react-native react-native-macos react react-native-webview react-native-safe-area-context pdf-lib; do
   link_pkg "$pkg"
 done
+
+link_pkg "@react-native-async-storage/async-storage"
 
 if [[ -d "$ROOT/node_modules/@react-native" ]]; then
   for pkg in "$ROOT/node_modules/@react-native"/*; do

@@ -1,9 +1,5 @@
 import {create} from 'zustand';
-import {
-  analyzePdfForms,
-  type DetectedFormField,
-  type FormFieldSource,
-} from '@kiteview/pdf-engine';
+import type {DetectedFormField, FormFieldSource} from '@kiteview/pdf-engine';
 import {
   invokeFormsDetect,
   isSupabaseConfigured,
@@ -14,12 +10,12 @@ export type FormAnalysisStatus = 'idle' | 'loading' | 'none' | 'ready' | 'error'
 export type FormDetectionSource = FormFieldSource | null;
 
 /**
- * Cascade stage after user opts into detect:
+ * Cascade stage after user opts into AI scan:
  * - idle: not requested
- * - acroform: running pdf-lib
- * - heuristic: need WebView text heuristics
- * - vision: sparse fallback (page 1 Edge only)
+ * - acroform: unused in hot path (kept for type compatibility)
+ * - vision: page 1 Edge OpenAI (default AI scan)
  * - done: finished
+ * - heuristic: retained for type compatibility; unused
  */
 export type FormCascadeStage =
   | 'idle'
@@ -28,8 +24,8 @@ export type FormCascadeStage =
   | 'vision'
   | 'done';
 
-/** Vision only when local stages leave fewer than this many fields. */
-export const VISION_SPARSE_THRESHOLD = 3;
+/** @deprecated Vision is the default AI scan path; threshold unused. */
+export const VISION_SPARSE_THRESHOLD = 1;
 
 const SOURCE_RANK: Record<FormFieldSource, number> = {
   acroform: 3,
@@ -47,8 +43,8 @@ type FormAnalysisState = {
   detectionSource: FormDetectionSource;
   cascadeStage: FormCascadeStage;
   /**
-   * User-triggered detect only. Never call from file-open.
-   * Publishes AcroForm immediately when found, then always continues to heuristics.
+   * User-triggered AI scan. Never call from file-open.
+   * Goes straight to page-1 vision (no blocking AcroForm parse).
    */
   startDetect: (base64: string) => Promise<void>;
   applyHeuristicFields: (fields: DetectedFormField[]) => void;
@@ -118,8 +114,15 @@ function bestSource(fields: DetectedFormField[]): FormDetectionSource {
   return null;
 }
 
-function shouldRunVision(fieldCount: number): boolean {
-  return fieldCount < VISION_SPARSE_THRESHOLD && isSupabaseConfigured();
+let formAnalysisModulePromise: Promise<
+  typeof import('@kiteview/pdf-engine/src/formAnalysis')
+> | null = null;
+
+/** Optional warm of pdf-lib (unused on the vision hot path). */
+export function preloadFormAnalysis(): void {
+  if (!formAnalysisModulePromise) {
+    formAnalysisModulePromise = import('@kiteview/pdf-engine/src/formAnalysis');
+  }
 }
 
 export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
@@ -160,7 +163,21 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       cascadeStage: 'done',
     }),
 
-  startDetect: async (base64: string) => {
+  startDetect: async (_base64: string) => {
+    if (!isSupabaseConfigured()) {
+      set({
+        status: 'error',
+        fields: [],
+        selectedFieldId: null,
+        fieldValues: {},
+        error: 'AI scan needs Supabase configured in .env',
+        detectionSource: null,
+        cascadeStage: 'done',
+      });
+      return;
+    }
+
+    // Vision-only hot path — skip pdf-lib so scan feels as fast as before.
     set({
       status: 'loading',
       fields: [],
@@ -168,55 +185,17 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       fieldValues: {},
       error: null,
       detectionSource: null,
-      cascadeStage: 'acroform',
-    });
-
-    const result = await analyzePdfForms(base64);
-    if (result.status === 'error') {
-      set({
-        status: 'error',
-        fields: [],
-        fieldValues: {},
-        error: result.error ?? 'Form analysis failed',
-        detectionSource: null,
-        cascadeStage: 'done',
-      });
-      return;
-    }
-
-    const acro =
-      result.status === 'ready' && result.fields.length > 0
-        ? withSource(result.fields, 'acroform')
-        : [];
-
-    // Publish AcroForm immediately when present, then always run heuristics.
-    set({
-      status: acro.length > 0 ? 'ready' : 'loading',
-      fields: acro,
-      fieldValues: {},
-      error: null,
-      detectionSource: acro.length > 0 ? 'acroform' : null,
-      cascadeStage: 'heuristic',
+      cascadeStage: 'vision',
     });
   },
 
+  /** Unused in AI-scan cascade; kept for type/API stability. */
   applyHeuristicFields: fields => {
     const incoming = withSource(fields, 'heuristic');
     const merged = mergeFields(get().fields, incoming);
     const source = bestSource(merged);
 
     if (merged.length === 0) {
-      if (shouldRunVision(0)) {
-        set({
-          status: 'loading',
-          fields: [],
-          fieldValues: {},
-          detectionSource: null,
-          cascadeStage: 'vision',
-          error: null,
-        });
-        return;
-      }
       set({
         status: 'none',
         fields: [],
@@ -229,13 +208,12 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       return;
     }
 
-    // Show heuristic/AcroForm results immediately.
     set({
       status: 'ready',
       fields: merged,
       error: null,
       detectionSource: source,
-      cascadeStage: shouldRunVision(merged.length) ? 'vision' : 'done',
+      cascadeStage: 'done',
     });
   },
 
@@ -253,7 +231,6 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       return;
     }
 
-    // Keep existing overlays visible while vision runs.
     set({
       status: prior.length > 0 ? 'ready' : 'loading',
       error: null,
@@ -286,7 +263,6 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      // Keep prior fields on vision failure.
       if (prior.length > 0) {
         set({
           status: 'ready',
