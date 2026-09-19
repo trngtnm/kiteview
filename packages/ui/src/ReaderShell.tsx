@@ -11,6 +11,7 @@ import {
 import {EmptyState} from './EmptyState';
 import {GutterSlot} from './GutterSlot';
 import {SidebarRail} from './SidebarRail';
+import type {DocumentTab} from '@kiteview/core';
 import {
   PDF_COLUMN_MAX_WIDTH,
   RAIL_WIDTH,
@@ -18,12 +19,19 @@ import {
   theme,
 } from './theme';
 
+const KeyboardSurface = View as React.ComponentType<any>;
+
 type ReaderShellProps = {
   fileName?: string | null;
+  tabs: DocumentTab[];
+  activeTabId: string | null;
   logoSource: ImageSourcePropType;
   onSelectFile: () => void;
+  onSelectTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
   onClearFile?: () => void;
   onRenameFile: (name: string) => void;
+  onSaveFile: (name: string) => void;
   /** Content for the left gutter (e.g. definition panel). */
   leftGutter?: React.ReactNode;
   children?: React.ReactNode;
@@ -38,16 +46,24 @@ type ReaderShellProps = {
  */
 export function ReaderShell({
   fileName,
+  tabs,
+  activeTabId,
   logoSource,
   onSelectFile,
+  onSelectTab,
+  onCloseTab,
   onClearFile,
   onRenameFile,
+  onSaveFile,
   leftGutter,
   children,
 }: ReaderShellProps) {
   const hasDocument = Boolean(children);
   const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [editingFileName, setEditingFileName] = useState(fileName ?? '');
+  const [nameFieldFocused, setNameFieldFocused] = useState(false);
+  const [editingFileName, setEditingFileName] = useState(
+    fileName?.replace(/\.pdf$/i, '') ?? '',
+  );
   const sidebarOffset = useRef(new Animated.Value(0)).current;
   const readerOffset = sidebarOffset.interpolate({
     inputRange: [-RAIL_WIDTH, 0],
@@ -55,7 +71,7 @@ export function ReaderShell({
   });
 
   useEffect(() => {
-    setEditingFileName(fileName ?? '');
+    setEditingFileName(fileName?.replace(/\.pdf$/i, '') ?? '');
   }, [fileName]);
 
   useEffect(() => {
@@ -75,7 +91,14 @@ export function ReaderShell({
   };
 
   return (
-    <View style={styles.window}>
+    <KeyboardSurface
+      style={styles.window}
+      onKeyDown={(event: any) => {
+        if ((event.metaKey || event.ctrlKey) && event.key?.toLowerCase() === 's') {
+          event.preventDefault?.();
+          onSaveFile(editingFileName.trim());
+        }
+      }}>
       <View style={styles.stage}>
         <Animated.View
           style={[styles.readerLayer, {transform: [{translateX: readerOffset}]}]}>
@@ -96,25 +119,21 @@ export function ReaderShell({
           <View style={styles.fileNameBar}>
             <TextInput
               accessibilityLabel="PDF name"
-              onBlur={() => {
-                const name = editingFileName.trim();
-                if (name && name !== fileName) {
-                  onRenameFile(name);
-                }
-              }}
+              onBlur={() => setNameFieldFocused(false)}
               onChangeText={value => setEditingFileName(value)}
-              onSubmitEditing={event => {
-                const name = event.nativeEvent.text.trim();
-                if (name) {
-                  onRenameFile(name);
-                }
-              }}
+              onFocus={() => setNameFieldFocused(true)}
+              onSubmitEditing={() => onSaveFile(editingFileName.trim())}
               placeholder="PDF name"
-              cursorColor={theme.accent}
-              selectionColor={theme.accent}
-              style={styles.fileNameInput}
+              caretHidden={false}
+              cursorColor="#000000"
+              selectionColor="#B9D9FF"
+              style={[
+                styles.fileNameInput,
+                nameFieldFocused && styles.fileNameInputFocused,
+              ]}
               value={editingFileName}
             />
+            <Text style={styles.fileExtension}>.pdf</Text>
           </View>
         ) : null}
       </View>
@@ -123,8 +142,12 @@ export function ReaderShell({
         style={[styles.sidebarLayer, {transform: [{translateX: sidebarOffset}]}]}>
         <SidebarRail
           fileName={fileName}
+          tabs={tabs}
+          activeTabId={activeTabId}
           logoSource={logoSource}
           onSelectFile={onSelectFile}
+          onSelectTab={onSelectTab}
+          onCloseTab={onCloseTab}
           onClearFile={onClearFile}
         />
         <Pressable
@@ -138,7 +161,7 @@ export function ReaderShell({
           <Text style={styles.revealLabel}>{sidebarVisible ? '‹' : '›'}</Text>
         </Pressable>
       </Animated.View>
-    </View>
+    </KeyboardSurface>
   );
 }
 
@@ -212,15 +235,34 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     minWidth: 180,
     zIndex: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   fileNameInput: {
     color: theme.textPrimary,
     backgroundColor: '#FFFFFF',
+    borderColor: '#A1A1A6',
+    borderWidth: 1,
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
     fontSize: 13,
     minHeight: 30,
+    flex: 1,
+  },
+  fileNameInputFocused: {
+    borderColor: '#FF8A00',
+    borderWidth: 2,
+  },
+  fileExtension: {
+    color: theme.textSecondary,
+    backgroundColor: '#FFFFFF',
+    fontSize: 13,
+    minHeight: 30,
+    paddingRight: 8,
+    paddingVertical: 6,
+    marginLeft: -4,
   },
   revealLabel: {
     color: '#F5F5F7',
