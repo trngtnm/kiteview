@@ -12,5 +12,5 @@ export {SidebarRail} from './SidebarRail';
 export {EmptyState} from './EmptyState';
 export {ReaderShell} from './ReaderShell';
 export {DefinitionPanel} from './DefinitionPanel';
-export {ParaphrasePanel} from './ParaphrasePanel';
+export {AnnotationPanel} from './AnnotationPanel';
 export {FormFieldsPanel} from './FormFieldsPanel';

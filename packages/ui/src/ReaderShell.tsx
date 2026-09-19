@@ -83,9 +83,11 @@ export function ReaderShell({
   );
   const nameInputRef = useRef<TextInput>(null);
   const sidebarOffset = useRef(new Animated.Value(0)).current;
-  const readerOffset = sidebarOffset.interpolate({
+  // Inset the stage when the rail is open so gutters/PDF never sit under it.
+  // Do not translate the WebView — that offsets caret/highlight hit-testing.
+  const stageLeft = sidebarOffset.interpolate({
     inputRange: [-RAIL_WIDTH, 0],
-    outputRange: [0, RAIL_WIDTH / 2],
+    outputRange: [0, RAIL_WIDTH],
   });
 
   useEffect(() => {
@@ -137,9 +139,8 @@ export function ReaderShell({
           onSaveFile(editingFileName.trim());
         }
       }}>
-      <View style={styles.stage}>
-        <Animated.View
-          style={[styles.readerLayer, {transform: [{translateX: readerOffset}]}]}>
+      <Animated.View style={[styles.stage, {left: stageLeft}]}>
+        <View style={styles.readerLayer}>
           {hasDocument ? (
             <View style={styles.documentStage}>
               <View style={styles.pdfLayer}>{children}</View>
@@ -152,7 +153,7 @@ export function ReaderShell({
           ) : (
             <EmptyState onSelectFile={onSelectFile} />
           )}
-        </Animated.View>
+        </View>
         {fileName ? (
           <View style={styles.fileNameBar}>
             <View style={styles.inputShell}>
@@ -197,7 +198,7 @@ export function ReaderShell({
             <Text style={styles.fileExtension}>.pdf</Text>
           </View>
         ) : null}
-      </View>
+      </Animated.View>
       <Animated.View
         pointerEvents="auto"
         style={[styles.sidebarLayer, {transform: [{translateX: sidebarOffset}]}]}>
@@ -238,7 +239,6 @@ const styles = StyleSheet.create({
   },
   stage: {
     position: 'absolute',
-    left: 0,
     right: 0,
     top: 0,
     bottom: 0,
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   readerLayer: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
   },
   documentStage: {
     flex: 1,

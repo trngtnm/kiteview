@@ -14,6 +14,8 @@ type NativePicker = {
     anonKey: string,
     phrase: string,
     pageNumber?: number,
+    annotationType?: string,
+    context?: string,
   ) => Promise<unknown>;
 };
 
@@ -42,10 +44,19 @@ export function registerMacosPdfPicker(): void {
     }
     return KiteViewFilePicker.renamePdf(uri, name);
   });
-  registerAnnotatePhrase((endpoint, anonKey, phrase, pageNumber) => {
-    if (!KiteViewFilePicker?.annotatePhrase) {
-      throw new Error('KiteViewFilePicker native annotation is not linked');
-    }
-    return KiteViewFilePicker.annotatePhrase(endpoint, anonKey, phrase, pageNumber);
-  });
+  registerAnnotatePhrase(
+    (endpoint, anonKey, phrase, pageNumber, annotationType, context) => {
+      if (!KiteViewFilePicker?.annotatePhrase) {
+        throw new Error('KiteViewFilePicker native annotation is not linked');
+      }
+      return KiteViewFilePicker.annotatePhrase(
+        endpoint,
+        anonKey,
+        phrase,
+        pageNumber ?? 0,
+        annotationType ?? 'explain',
+        context ?? '',
+      );
+    },
+  );
 }

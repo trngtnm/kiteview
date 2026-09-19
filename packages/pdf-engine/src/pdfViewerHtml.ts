@@ -4,17 +4,12 @@
  *
  * Form overlays / heuristics / page capture are opt-in via window.__kv* APIs
  * injected after first paint — they never run during initial render.
+ * Phrase annotation GPT calls happen in React Native, not in this HTML.
  */
 const PAGE_MAX_WIDTH = 820;
 
-export function buildPdfViewerHtml(
-  pdfDataUri: string,
-  gptEndpointUrl = '',
-  supabaseAnonKey = '',
-): string {
+export function buildPdfViewerHtml(pdfDataUri: string): string {
   const safeUri = pdfDataUri.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const safeGptEndpoint = gptEndpointUrl.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const safeAnonKey = supabaseAnonKey.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
   return `<!DOCTYPE html>
 <html>
@@ -231,9 +226,37 @@ export function buildPdfViewerHtml(
       return { range: wordRange, word: full.slice(start, end) };
     }
 
+    let pointerDown = null;
+    document.addEventListener('mousedown', (event) => {
+      pointerDown = { x: event.clientX, y: event.clientY };
+    }, true);
+    document.addEventListener('mouseup', () => {
+      // Keep pointerDown until click handler runs; clear on next tick if no click.
+      setTimeout(() => {
+        pointerDown = null;
+      }, 0);
+    }, true);
+
     function onLayerClick(event, pageNumber) {
       event.preventDefault();
       event.stopPropagation();
+
+      // Multi-word drag/select → annotation path only; never define the last word.
+      const selection = window.getSelection();
+      const selectedText = selection ? selection.toString().trim() : '';
+      if (selectedText && selectedText.split(/\\s+/).filter(Boolean).length >= 2) {
+        return;
+      }
+      if (
+        pointerDown &&
+        (Math.abs(event.clientX - pointerDown.x) > 5 ||
+          Math.abs(event.clientY - pointerDown.y) > 5)
+      ) {
+        pointerDown = null;
+        return;
+      }
+      pointerDown = null;
+
       const hit = wordRangeFromPoint(event.clientX, event.clientY);
       if (!hit) return;
       const cleaned = normalizeWord(hit.word);
@@ -242,55 +265,28 @@ export function buildPdfViewerHtml(
       post({ type: 'wordClick', word: cleaned, pageNumber });
     }
 
-    function postJsonWithXhr(url, headers, body) {
-      return new Promise((resolve, reject) => {
-        const request = new XMLHttpRequest();
-        request.open('POST', url, true);
-        Object.entries(headers).forEach(([key, value]) => request.setRequestHeader(key, value));
-        request.onload = () => resolve({status: request.status, text: request.responseText});
-        request.onerror = () => reject(new Error('GPT request could not reach the endpoint'));
-        request.send(body);
-      });
-    }
-
-    async function requestPhraseAnnotation(phrase, pageNumber) {
-      if (!'${safeGptEndpoint}' || !'${safeAnonKey}') {
-        post({type: 'phraseAnnotationError', phrase, message: 'GPT endpoint is not configured'});
-        return;
-      }
-      const instruction = 'Explain the selected phrase in clear layman terms and briefly describe what it means in context.';
-      const headers = {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ${safeAnonKey}',
-        apikey: '${safeAnonKey}',
-      };
-      const body = JSON.stringify({
-        selection_text: phrase,
-        text: phrase,
-        page_number: pageNumber,
-        annotation_type: 'paraphrase',
-        instruction,
-        prompt: instruction + '\\n\\nSelected phrase: ' + phrase,
-        messages: [
-          {role: 'system', content: instruction},
-          {role: 'user', content: phrase},
-        ],
-      });
+    function selectionContext(selection, phrase) {
       try {
-        let result;
-        try {
-          const response = await fetch('${safeGptEndpoint}', {method: 'POST', headers, body});
-          result = {status: response.status, text: await response.text()};
-        } catch {
-          result = await postJsonWithXhr('${safeGptEndpoint}', headers, body);
+        if (!selection || selection.rangeCount === 0) return '';
+        const range = selection.getRangeAt(0);
+        const page = range.commonAncestorContainer.nodeType === 1
+          ? range.commonAncestorContainer.closest('.page')
+          : range.commonAncestorContainer.parentElement?.closest('.page');
+        if (!page) return '';
+        const layer = page.querySelector('.textLayer');
+        if (!layer) return '';
+        const full = (layer.innerText || layer.textContent || '').replace(/\\s+/g, ' ').trim();
+        if (!full) return '';
+        const needle = phrase.replace(/\\s+/g, ' ').trim();
+        const idx = full.indexOf(needle);
+        if (idx < 0) {
+          return full.slice(0, 500);
         }
-        const data = JSON.parse(result.text);
-        if (result.status < 200 || result.status >= 300) throw new Error(data.message || 'GPT request failed (' + result.status + ')');
-        const content = data.paraphrase || data.explanation || data.content || data.result || data.choices?.[0]?.message?.content;
-        if (!content) throw new Error('The GPT endpoint returned no paraphrase content');
-        post({type: 'phraseAnnotation', phrase, content: String(content).trim()});
-      } catch (error) {
-        post({type: 'phraseAnnotationError', phrase, message: String(error && error.message ? error.message : error)});
+        const start = Math.max(0, idx - 180);
+        const end = Math.min(full.length, idx + needle.length + 180);
+        return full.slice(start, end).trim().slice(0, 500);
+      } catch {
+        return '';
       }
     }
 
@@ -300,13 +296,14 @@ export function buildPdfViewerHtml(
       selectionTimer = setTimeout(() => {
         const selection = window.getSelection();
         const phrase = selection ? selection.toString().trim() : '';
-        if (!phrase || phrase.split(/\s+/).length < 2 || !selection?.anchorNode) {
+        if (!phrase || phrase.split(/\\s+/).length < 2 || !selection?.anchorNode) {
           return;
         }
         const page = selection.anchorNode.parentElement?.closest('.page');
         const pageNumber = page ? Array.from(viewer.children).indexOf(page) + 1 : 0;
         if (pageNumber > 0) {
-          post({type: 'phraseSelect', phrase, pageNumber});
+          const context = selectionContext(selection, phrase);
+          post({type: 'phraseSelect', phrase, pageNumber, context: context || undefined});
         }
       }, 80);
     });

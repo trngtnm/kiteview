@@ -108,6 +108,8 @@ RCT_EXPORT_METHOD(annotatePhrase:(NSString *)endpoint
                   anonKey:(NSString *)anonKey
                   phrase:(NSString *)phrase
                   pageNumber:(NSNumber *)pageNumber
+                  annotationType:(NSString *)annotationType
+                  context:(NSString *)context
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
@@ -116,24 +118,29 @@ RCT_EXPORT_METHOD(annotatePhrase:(NSString *)endpoint
     reject(@"invalid_request", @"GPT endpoint configuration is invalid", nil);
     return;
   }
+  NSString *type =
+      (annotationType != nil && annotationType.length > 0) ? annotationType : @"explain";
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
   request.HTTPMethod = @"POST";
   [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
   [request setValue:[NSString stringWithFormat:@"Bearer %@", anonKey] forHTTPHeaderField:@"Authorization"];
   [request setValue:anonKey forHTTPHeaderField:@"apikey"];
-  NSDictionary *body = @{
-    @"selection_text": phrase,
-    @"text": phrase,
+  NSMutableDictionary *body = [@{
+    @"selection_text": phrase ?: @"",
+    @"text": phrase ?: @"",
     @"page_number": pageNumber ?: @0,
-    @"annotation_type": @"paraphrase",
-    @"instruction": @"Explain the selected phrase in clear layman terms and briefly describe what it means in context.",
-  };
+    @"annotation_type": type,
+  } mutableCopy];
+  if (context != nil && context.length > 0) {
+    body[@"context"] = context;
+  }
   NSError *serializationError = nil;
-  request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:&serializationError];
-  if (serializationError != nil) {
-    reject(@"serialization_failed", serializationError.localizedDescription, serializationError);
+  NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&serializationError];
+  if (serializationError != nil || bodyData == nil) {
+    reject(@"serialization_failed", serializationError.localizedDescription ?: @"Could not encode request", serializationError);
     return;
   }
+  request.HTTPBody = bodyData;
   [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
     if (error != nil) {
       reject(@"network_failed", error.localizedDescription ?: @"GPT request failed", error);
@@ -141,17 +148,71 @@ RCT_EXPORT_METHOD(annotatePhrase:(NSString *)endpoint
     }
     NSInteger status = [(NSHTTPURLResponse *)response statusCode];
     NSError *jsonError = nil;
-    id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError] : nil;
+    id json = nil;
+    if (data.length > 0) {
+      json = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error:&jsonError];
+    }
     if (status < 200 || status >= 300) {
-      NSString *message = [json isKindOfClass:[NSDictionary class]] ? json[@"message"] : nil;
+      NSString *message = nil;
+      if ([json isKindOfClass:[NSDictionary class]]) {
+        message = json[@"error"] ?: json[@"message"];
+      }
       reject(@"request_failed", message ?: [NSString stringWithFormat:@"GPT request failed (%ld)", (long)status], jsonError);
       return;
     }
-    if (jsonError != nil || json == nil) {
-      reject(@"invalid_response", @"GPT returned invalid JSON", jsonError);
+    if ([json isKindOfClass:[NSDictionary class]]) {
+      NSDictionary *dict = (NSDictionary *)json;
+      NSString *content = nil;
+      id contentValue = dict[@"content"] ?: dict[@"explanation"] ?: dict[@"paraphrase"] ?: dict[@"result"];
+      if ([contentValue isKindOfClass:[NSString class]]) {
+        content = [(NSString *)contentValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+      }
+      if (content.length == 0) {
+        id choices = dict[@"choices"];
+        if ([choices isKindOfClass:[NSArray class]] && [(NSArray *)choices count] > 0) {
+          id first = [(NSArray *)choices firstObject];
+          if ([first isKindOfClass:[NSDictionary class]]) {
+            id message = first[@"message"];
+            if ([message isKindOfClass:[NSDictionary class]]) {
+              id nested = message[@"content"];
+              if ([nested isKindOfClass:[NSString class]]) {
+                content = [(NSString *)nested stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+              }
+            }
+          }
+        }
+      }
+      if (content.length == 0) {
+        NSString *err = [dict[@"error"] isKindOfClass:[NSString class]] ? dict[@"error"] : @"The annotation response was empty";
+        reject(@"empty_response", err, nil);
+        return;
+      }
+      // Always resolve a JS-friendly contract so Metro/JSC never drops fields.
+      resolve(@{
+        @"content": content,
+        @"explanation": content,
+        @"paraphrase": content,
+        @"annotation_type": dict[@"annotation_type"] ?: type,
+        @"page_number": dict[@"page_number"] ?: (pageNumber ?: @0),
+      });
       return;
     }
-    resolve(json);
+    if ([json isKindOfClass:[NSString class]]) {
+      NSString *content = [(NSString *)json stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+      if (content.length == 0) {
+        reject(@"empty_response", @"The annotation response was empty", nil);
+        return;
+      }
+      resolve(@{
+        @"content": content,
+        @"explanation": content,
+        @"paraphrase": content,
+        @"annotation_type": type,
+        @"page_number": pageNumber ?: @0,
+      });
+      return;
+    }
+    reject(@"invalid_response", @"GPT returned invalid JSON", jsonError);
   }] resume];
 }
 

@@ -4,6 +4,8 @@ import {setEnv} from '@kiteview/core';
 /**
  * Public client config only — OpenAI secrets stay in Supabase Edge Function secrets.
  * Values come from the root `.env` (see `.env.example`).
+ *
+ * getEnv() rewrites a stale GPT_ENDPOINT_URL (e.g. cached forms-detect) to annotate.
  */
 export function bootstrapEnv(): void {
   setEnv({

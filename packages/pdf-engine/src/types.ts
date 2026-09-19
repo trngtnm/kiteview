@@ -22,11 +22,11 @@ export type PdfViewerProps = {
   onPageReady?: (pageNumber: number) => void;
   onError?: (message: string) => void;
   onWordClick?: (word: string, pageNumber: number) => void;
-  onPhraseSelect?: (phrase: string, pageNumber: number) => void;
-  onPhraseAnnotation?: (phrase: string, content: string) => void;
-  onPhraseAnnotationError?: (phrase: string, message: string) => void;
-  gptEndpointUrl?: string;
-  supabaseAnonKey?: string;
+  onPhraseSelect?: (
+    phrase: string,
+    pageNumber: number,
+    context?: string,
+  ) => void;
   formFields?: DetectedFormField[];
   selectedFieldId?: string | null;
   onFormFieldClick?: (id: string) => void;

@@ -32,4 +32,11 @@ Root `.env` (see `.env.example`):
 
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
-- `GPT_ENDPOINT_URL` — Edge Function URL (secrets stay server-side)
+- `GPT_ENDPOINT_URL` — `…/functions/v1/annotate` (phrase paraphrase; OpenAI key stays in Edge secrets)
+
+Deploy Edge Functions after linking the project:
+
+```bash
+supabase functions deploy annotate
+supabase functions deploy forms-detect
+```
