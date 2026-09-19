@@ -1,11 +1,13 @@
 import {NativeModules} from 'react-native';
 import {
   registerPickPdfFile,
+  registerRenamePdfFile,
   type PickedPdfFile,
 } from '@kiteview/core';
 
 type NativePicker = {
   pickPdf: () => Promise<PickedPdfFile | null>;
+  renamePdf: (uri: string, name: string) => Promise<PickedPdfFile>;
 };
 
 const {KiteViewFilePicker} = NativeModules as {
@@ -26,5 +28,11 @@ export function registerMacosPdfPicker(): void {
       name: result.name,
       base64: result.base64,
     };
+  });
+  registerRenamePdfFile(async (uri, name) => {
+    if (!KiteViewFilePicker?.renamePdf) {
+      throw new Error('KiteViewFilePicker native rename is not linked');
+    }
+    return KiteViewFilePicker.renamePdf(uri, name);
   });
 }
