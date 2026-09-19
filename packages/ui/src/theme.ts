@@ -12,14 +12,14 @@ export type Theme = {
 };
 
 export const theme: Theme = {
-  windowBg: '#1C1C1E',
-  railBg: '#2C2C2E',
-  railBorder: '#3A3A3C',
-  stageBg: '#F5F5F7',
+  windowBg: '#F7F8FA',
+  railBg: '#FFFFFF',
+  railBorder: '#E1E5EB',
+  stageBg: '#F7F8FA',
   pageSurface: '#FFFFFF',
-  textPrimary: '#1D1D1F',
-  textSecondary: '#6E6E73',
-  accent: '#0071E3',
+  textPrimary: '#172235',
+  textSecondary: '#6B7890',
+  accent: '#2D7FF9',
   accentText: '#FFFFFF',
   gutterBg: 'transparent',
 };

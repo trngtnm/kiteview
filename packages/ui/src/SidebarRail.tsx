@@ -1,5 +1,6 @@
-import React from 'react';
+import React, {useRef, useState} from 'react';
 import {
+  Animated,
   Image,
   ImageSourcePropType,
   Pressable,
@@ -40,6 +41,19 @@ export function SidebarRail({
   formsDetectDisabled,
   formFieldCount,
 }: SidebarRailProps) {
+  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  const [detectHovered, setDetectHovered] = useState(false);
+  const detectHoverProgress = useRef(new Animated.Value(0)).current;
+
+  const setDetectHover = (value: boolean) => {
+    setDetectHovered(value);
+    Animated.timing(detectHoverProgress, {
+      toValue: value ? 1 : 0,
+      duration: value ? 650 : 450,
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
     <View style={styles.rail}>
       <View style={styles.header}>
@@ -66,6 +80,8 @@ export function SidebarRail({
                 accessibilityRole="tab"
                 key={tab.id}
                 onPress={() => onSelectTab(tab.id)}
+                onHoverIn={() => setHoveredTabId(tab.id)}
+                onHoverOut={() => setHoveredTabId(null)}
                 style={({pressed}) => [
                   styles.tab,
                   tab.id === activeTabId && styles.activeTab,
@@ -100,11 +116,17 @@ export function SidebarRail({
               accessibilityRole="button"
               disabled={formsDetectDisabled}
               onPress={onDetectForms}
+              onHoverIn={() => setDetectHover(true)}
+              onHoverOut={() => setDetectHover(false)}
               style={({pressed}) => [
                 styles.detectButton,
                 formsDetectDisabled && styles.detectDisabled,
-                pressed && !formsDetectDisabled && styles.pressed,
+                detectHovered && !formsDetectDisabled && styles.hovered,
               ]}>
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.hoverFill, {opacity: detectHoverProgress}]}
+              />
               <Text style={styles.detectLabel}>{formsDetectLabel}</Text>
             </Pressable>
             {typeof formFieldCount === 'number' ? (
@@ -122,17 +144,23 @@ export function SidebarRail({
 const styles = StyleSheet.create({
   rail: {
     width: RAIL_WIDTH,
-    backgroundColor: theme.railBg,
+    height: '100%',
+    backgroundColor: '#FDFEFF',
+    borderTopRightRadius: 18,
+    borderBottomRightRadius: 18,
+    overflow: 'hidden',
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: theme.railBorder,
+    shadowColor: '#000000',
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: {width: 4, height: 0},
   },
   header: {
-    backgroundColor: theme.railBg,
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#6A6A70',
+    backgroundColor: '#F7FAFE',
+    paddingHorizontal: 14,
+    paddingTop: 2,
+    paddingBottom: 16,
     alignItems: 'center',
   },
   logo: {
@@ -140,12 +168,15 @@ const styles = StyleSheet.create({
     height: 105,
   },
   body: {
-    paddingTop: 18,
+    paddingTop: 22,
     paddingHorizontal: 16,
     paddingBottom: 20,
+    backgroundColor: '#F7FAFE',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F3F7',
   },
   section: {
-    color: '#A1A1A6',
+    color: '#69778B',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.8,
@@ -157,7 +188,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     marginTop: 16,
-    color: '#8E8E93',
+    color: '#8995A6',
     fontSize: 12,
     lineHeight: 16,
   },
@@ -169,22 +200,25 @@ const styles = StyleSheet.create({
     minHeight: 42,
     paddingLeft: 10,
     paddingRight: 6,
-    borderRadius: 7,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#242426',
+    backgroundColor: '#EEF4FB',
+    borderWidth: 1,
+    borderColor: '#E4E9F0',
   },
   activeTab: {
-    backgroundColor: '#454548',
+    backgroundColor: '#DCEBFC',
+    borderColor: '#B7D2FA',
   },
   tabName: {
     flex: 1,
-    color: '#F5F5F7',
+    color: '#26364B',
     fontSize: 12,
     lineHeight: 16,
   },
   tabClose: {
-    color: '#A1A1A6',
+    color: '#77859A',
     fontSize: 18,
     lineHeight: 20,
     paddingHorizontal: 5,
@@ -203,14 +237,25 @@ const styles = StyleSheet.create({
   },
   detectButton: {
     alignSelf: 'stretch',
-    backgroundColor: theme.accent,
-    borderRadius: 8,
+    backgroundColor: '#367EDB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     paddingVertical: 10,
     paddingHorizontal: 12,
     alignItems: 'center',
+    overflow: 'hidden',
   },
   detectDisabled: {
     opacity: 0.45,
+  },
+  hovered: {
+    backgroundColor: '#4B91E7',
+    borderColor: '#A8CBF8',
+  },
+  hoverFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.34)',
   },
   detectLabel: {
     color: '#FFFFFF',

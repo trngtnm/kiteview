@@ -2,6 +2,7 @@
 
 #import <React/RCTBundleURLProvider.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
+#import <AppKit/AppKit.h>
 
 @implementation AppDelegate
 
@@ -12,8 +13,16 @@
   // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
   self.dependencyProvider = [RCTAppDependencyProvider new];
-  
-  return [super applicationDidFinishLaunching:notification];
+
+  [super applicationDidFinishLaunching:notification];
+
+  NSWindow *window = self.window;
+  window.titleVisibility = NSWindowTitleHidden;
+  window.titlebarAppearsTransparent = NO;
+  window.styleMask |= NSWindowStyleMaskFullSizeContentView;
+  window.backgroundColor = [NSColor whiteColor];
+  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  window.title = @"";
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
