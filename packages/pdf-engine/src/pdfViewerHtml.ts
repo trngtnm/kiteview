@@ -5,7 +5,6 @@
  * Layout constants match packages/ui theme (centered page + annotation gutters).
  */
 const PAGE_MAX_WIDTH = 820;
-const GUTTER_MIN_WIDTH = 120;
 
 export function buildPdfViewerHtml(pdfDataUri: string): string {
   const safeUri = pdfDataUri.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -101,7 +100,6 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs';
 
     const PAGE_MAX_WIDTH = ${PAGE_MAX_WIDTH};
-    const GUTTER_MIN_WIDTH = ${GUTTER_MIN_WIDTH};
     const statusEl = document.getElementById('status');
     const viewer = document.getElementById('viewer');
     let highlightMark = null;
@@ -231,6 +229,11 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       viewer.appendChild(pageEl);
     }
 
+    function targetPageWidth() {
+      const available = document.documentElement.clientWidth - 8;
+      return Math.max(120, Math.min(PAGE_MAX_WIDTH, available));
+    }
+
     async function render() {
       try {
         const loadingTask = pdfjsLib.getDocument({ url: '${safeUri}' });
@@ -239,33 +242,8 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         post({ type: 'pageCount', count: pdf.numPages });
 
         const maxWidth = targetPageWidth();
-        const sidePad = Math.max(
-          GUTTER_MIN_WIDTH,
-          Math.floor((document.documentElement.clientWidth - maxWidth) / 2),
-        );
-        viewer.style.paddingLeft = sidePad + 'px';
-        viewer.style.paddingRight = sidePad + 'px';
-
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          const page = await pdf.getPage(pageNum);
-          const unscaled = page.getViewport({ scale: 1 });
-          const scale = maxWidth / unscaled.width;
-          const viewport = page.getViewport({ scale });
-          const cssWidth = Math.floor(viewport.width);
-          const cssHeight = Math.floor(viewport.height);
-
-          const canvas = document.createElement('canvas');
-          canvas.className = 'page';
-          canvas.width = cssWidth;
-          canvas.height = cssHeight;
-          canvas.style.width = cssWidth + 'px';
-          canvas.style.height = cssHeight + 'px';
-          viewer.appendChild(canvas);
-
-          await page.render({
-            canvasContext: canvas.getContext('2d'),
-            viewport,
-          }).promise;
+          await renderPage(pdf, pageNum, maxWidth);
         }
       } catch (err) {
         statusEl.textContent = 'Failed to load PDF';

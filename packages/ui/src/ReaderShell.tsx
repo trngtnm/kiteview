@@ -45,7 +45,7 @@ export function ReaderShell({
           <View style={styles.documentStage}>
             <View style={styles.pdfLayer}>{children}</View>
             <View style={styles.gutterOverlay} pointerEvents="box-none">
-              <GutterSlot side="left" />
+              <GutterSlot side="left">{leftGutter}</GutterSlot>
               <View style={styles.pdfColumnSpacer} />
               <GutterSlot side="right" />
             </View>
