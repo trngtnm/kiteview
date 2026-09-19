@@ -1,0 +1,26 @@
+{
+  "name": "kiteview",
+  "private": true,
+  "version": "0.0.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "bash scripts/link-macos-node-modules.sh",
+    "start": "npm run start --workspace=@kiteview/macos",
+    "macos": "npm run macos --workspace=@kiteview/macos",
+    "pods": "npm run pods --workspace=@kiteview/macos",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "build": "turbo run build"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@10"
+}

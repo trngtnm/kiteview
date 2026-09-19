@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Env
+# Copy from .env.example and fill in your project values.
+# GPT secrets stay in Supabase Edge Functions — only endpoint URLs belong here.
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+
+# React Native / macOS
+apps/macos/macos/build/
+apps/macos/macos/DerivedData/
+apps/macos/macos/Pods/
+apps/macos/node_modules/
+**/DerivedData/
+*.xcuserdata
+*.xcworkspace/xcuserdata/
+Pods/
+*.podspec.lock
+
+# Metro
+.metro-health-check*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/

@@ -1,0 +1,12 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    "paths": {
+      "@kiteview/core": ["../../packages/core/src"],
+      "@kiteview/ui": ["../../packages/ui/src"],
+      "@kiteview/pdf-engine": ["../../packages/pdf-engine/src"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "src/types/*.d.ts"],
+  "exclude": ["**/node_modules", "**/Pods", "macos/build"]
+}

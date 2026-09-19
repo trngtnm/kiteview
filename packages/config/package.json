@@ -1,0 +1,11 @@
+{
+  "name": "@kiteview/config",
+  "version": "0.0.1",
+  "private": true,
+  "files": ["tsconfig.base.json"],
+  "scripts": {
+    "typecheck": "echo 'no-op'",
+    "lint": "echo 'no-op'",
+    "build": "echo 'no-op'"
+  }
+}
