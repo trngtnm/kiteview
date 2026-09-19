@@ -1,7 +1,12 @@
 /**
- * Builds a continuous-scroll PDF viewer using pdf.js with an accurate TextLayer
- * for click-to-define (caret hit-testing, tight word highlight).
+ * Builds a self-contained continuous-scroll PDF viewer using pdf.js (CDN).
+ * The PDF is passed as a base64 data URI so local sandbox files work reliably.
+ *
+ * Layout constants match packages/ui theme (centered page + annotation gutters).
  */
+const PAGE_MAX_WIDTH = 820;
+const GUTTER_MIN_WIDTH = 120;
+
 export function buildPdfViewerHtml(pdfDataUri: string): string {
   const safeUri = pdfDataUri.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
@@ -15,21 +20,32 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     html, body {
       margin: 0;
       padding: 0;
+      width: 100%;
       background: #F5F5F7;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
     }
+    html { height: 100%; }
+    body { min-height: 100%; }
     #viewer {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 16px;
       padding: 24px 0 48px;
-      min-height: 100vh;
+      min-height: 100%;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
     }
     .page {
+      display: block;
       position: relative;
       background: #fff;
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      max-width: 100%;
     }
     .page canvas {
       display: block;
@@ -84,6 +100,8 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs';
 
+    const PAGE_MAX_WIDTH = ${PAGE_MAX_WIDTH};
+    const GUTTER_MIN_WIDTH = ${GUTTER_MIN_WIDTH};
     const statusEl = document.getElementById('status');
     const viewer = document.getElementById('viewer');
     let highlightMark = null;
@@ -220,9 +238,34 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         statusEl.style.display = 'none';
         post({ type: 'pageCount', count: pdf.numPages });
 
-        const maxWidth = Math.min(window.innerWidth - 8, 820);
+        const maxWidth = targetPageWidth();
+        const sidePad = Math.max(
+          GUTTER_MIN_WIDTH,
+          Math.floor((document.documentElement.clientWidth - maxWidth) / 2),
+        );
+        viewer.style.paddingLeft = sidePad + 'px';
+        viewer.style.paddingRight = sidePad + 'px';
+
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          await renderPage(pdf, pageNum, maxWidth);
+          const page = await pdf.getPage(pageNum);
+          const unscaled = page.getViewport({ scale: 1 });
+          const scale = maxWidth / unscaled.width;
+          const viewport = page.getViewport({ scale });
+          const cssWidth = Math.floor(viewport.width);
+          const cssHeight = Math.floor(viewport.height);
+
+          const canvas = document.createElement('canvas');
+          canvas.className = 'page';
+          canvas.width = cssWidth;
+          canvas.height = cssHeight;
+          canvas.style.width = cssWidth + 'px';
+          canvas.style.height = cssHeight + 'px';
+          viewer.appendChild(canvas);
+
+          await page.render({
+            canvasContext: canvas.getContext('2d'),
+            viewport,
+          }).promise;
         }
       } catch (err) {
         statusEl.textContent = 'Failed to load PDF';
