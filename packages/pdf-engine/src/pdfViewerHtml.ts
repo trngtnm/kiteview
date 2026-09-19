@@ -92,34 +92,41 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       position: absolute;
       border: 1.5px dashed rgba(0, 113, 227, 0.85);
       background: rgba(0, 113, 227, 0.08);
-      border-radius: 3px;
+      border-radius: 2px;
       pointer-events: auto;
       cursor: pointer;
       box-sizing: border-box;
       overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: stretch;
     }
     .formField.selected {
       border-style: solid;
       border-width: 2px;
       background: rgba(0, 113, 227, 0.18);
-      box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.25);
+      box-shadow: inset 0 0 0 1px rgba(0, 113, 227, 0.35);
     }
-    .formField input {
+    .formField input[type="text"] {
       width: 100%;
       height: 100%;
       border: none;
       outline: none;
       background: transparent;
       font: inherit;
-      font-size: 12px;
-      padding: 2px 4px;
+      font-size: inherit;
+      line-height: 1.1;
+      padding: 0 2px;
+      margin: 0;
       color: #1d1d1f;
+      box-sizing: border-box;
     }
     .formField input[type="checkbox"] {
       width: 70%;
       height: 70%;
       margin: auto;
       display: block;
+      flex: none;
       accent-color: #0071e3;
     }
     #status {
@@ -251,15 +258,18 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
               'formField' + (field.id === selectedFieldId ? ' selected' : '');
             el.dataset.fieldId = field.id;
             const r = field.rectNorm || {};
+            const boxH = Math.max(8, (r.h || 0) * pageH);
             el.style.left = (r.x || 0) * pageW + 'px';
             el.style.top = (r.y || 0) * pageH + 'px';
             el.style.width = Math.max(8, (r.w || 0) * pageW) + 'px';
-            el.style.height = Math.max(8, (r.h || 0) * pageH) + 'px';
+            el.style.height = boxH + 'px';
+            const fontPx = Math.max(8, Math.min(18, boxH * 0.7));
+            el.style.fontSize = fontPx + 'px';
 
             el.addEventListener('mousedown', (e) => {
               e.stopPropagation();
               selectedFieldId = field.id;
-              paintFormOverlays();
+              schedulePaintFormOverlays();
               post({ type: 'formFieldClick', id: field.id });
             });
 
@@ -279,7 +289,7 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
               const input = document.createElement('input');
               input.type = 'text';
               input.value = value;
-              input.placeholder = field.name || '';
+              input.placeholder = '';
               input.addEventListener('input', (e) => {
                 e.stopPropagation();
                 fieldValues[field.id] = input.value;
@@ -295,6 +305,12 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
 
             overlay.appendChild(el);
           });
+      });
+    }
+
+    function schedulePaintFormOverlays() {
+      requestAnimationFrame(() => {
+        paintFormOverlays();
       });
     }
 
@@ -325,21 +341,83 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       );
     }
 
+    /**
+     * Page-normalized top-left bounds for a pdf.js text item, using the
+     * same viewport transform as the rendered canvas / text layer.
+     */
     function itemBounds(item, viewport) {
-      const t = item.transform || [1, 0, 0, 1, 0, 0];
-      const x = t[4] / viewport.width;
-      const fontH = Math.abs(item.height || t[3] || 10) / viewport.height;
-      const w = Math.max(
-        0.02,
-        ((item.width != null ? item.width : (item.str || '').length * 5) /
-          viewport.width),
-      );
-      const y = 1 - t[5] / viewport.height - fontH;
+      const vpTransform = viewport.transform || [1, 0, 0, 1, 0, 0];
+      const itemTransform = item.transform || [1, 0, 0, 1, 0, 0];
+      const m = pdfjsLib.Util.transform(vpTransform, itemTransform);
+      const pageW = viewport.width;
+      const pageH = viewport.height;
+      if (!pageW || !pageH) {
+        return { x: 0, y: 0, w: 0.02, h: 0.02 };
+      }
+
+      const fontHeightPx = Math.hypot(m[2], m[3]) || Math.abs(item.height || 10);
+      const scaleX = Math.hypot(m[0], m[1]) || 1;
+      const itemScaleX = Math.hypot(itemTransform[0], itemTransform[1]) || 1;
+      const widthPx =
+        item.width != null && item.width > 0
+          ? item.width * (scaleX / itemScaleX)
+          : Math.max(4, (item.str || '').length * fontHeightPx * 0.5);
+
+      // m[4], m[5] = baseline origin in viewport (top-left) coords.
+      const left = m[4];
+      const top = m[5] - fontHeightPx * 0.8;
+      const x = left / pageW;
+      const y = top / pageH;
+      const w = widthPx / pageW;
+      const h = (fontHeightPx * 1.05) / pageH;
+
       return {
         x: Math.max(0, Math.min(1, x)),
         y: Math.max(0, Math.min(1, y)),
-        w: Math.max(0.01, Math.min(1 - x, w)),
-        h: Math.max(0.012, Math.min(0.08, fontH * 1.4)),
+        w: Math.max(0.008, Math.min(1 - Math.max(0, x), w)),
+        h: Math.max(0.01, Math.min(0.08, h)),
+      };
+    }
+
+    /** Blank rect for underscore/dot run inside a single text item. */
+    function blankRectFromSpan(bounds, fullStr, blankPart) {
+      const full = String(fullStr || '');
+      const blank = String(blankPart || '');
+      if (!full.length || !blank.length || bounds.w <= 0) {
+        return null;
+      }
+      let start = full.indexOf(blank);
+      if (start < 0) {
+        const m = full.match(/[_.…\\-]{2,}|\\.{3,}/);
+        if (!m) return null;
+        start = m.index || 0;
+        return blankRectFromSpan(bounds, full, m[0]);
+      }
+      const total = full.length;
+      const startFrac = start / total;
+      const blankFrac = Math.max(blank.length / total, 0.08);
+      return {
+        x: bounds.x + bounds.w * startFrac,
+        y: bounds.y,
+        w: Math.max(0.04, bounds.w * blankFrac),
+        h: Math.max(bounds.h, 0.014),
+      };
+    }
+
+    /** Gap to the right of a label, clipped by the next same-line item. */
+    function gapRectAfterLabel(labelBounds, nextBounds) {
+      const gapStart = labelBounds.x + labelBounds.w + 0.004;
+      const gapEnd =
+        nextBounds && nextBounds.x > gapStart + 0.05
+          ? nextBounds.x - 0.004
+          : Math.max(gapStart + 0.2, 0.88);
+      const w = Math.min(0.92, gapEnd) - gapStart;
+      if (w < 0.05) return null;
+      return {
+        x: gapStart,
+        y: labelBounds.y,
+        w,
+        h: Math.max(labelBounds.h, 0.014),
       };
     }
 
@@ -357,12 +435,13 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     function sameLine(a, b) {
       const ay = a.y + a.h / 2;
       const by = b.y + b.h / 2;
-      return Math.abs(ay - by) < Math.max(a.h, b.h) * 0.85;
+      return Math.abs(ay - by) < Math.max(a.h, b.h, 0.012) * 0.9;
     }
 
     function tryPushField(fields, pageNumber, idxRef, label, type, rect) {
       if (!rect || !label) return false;
-      if (rect.w < 0.04 || rect.h < 0.008) return false;
+      const minW = type === 'checkbox' ? 0.012 : 0.035;
+      if (rect.w < minW || rect.h < 0.008) return false;
       const candidate = {
         id: 'heur_' + pageNumber + '_' + idxRef.n,
         name: label,
@@ -371,15 +450,15 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         rectNorm: {
           x: Math.max(0, Math.min(0.98, rect.x)),
           y: Math.max(0, Math.min(0.98, rect.y)),
-          w: Math.max(0.04, Math.min(0.95, rect.w)),
-          h: Math.max(0.012, Math.min(0.1, rect.h)),
+          w: Math.max(minW, Math.min(0.95, rect.w)),
+          h: Math.max(0.01, Math.min(0.08, rect.h)),
         },
         source: 'heuristic',
       };
       const overlaps = fields.some(
         (f) =>
           f.pageNumber === pageNumber &&
-          rectsOverlap(f.rectNorm, candidate.rectNorm, 0.012),
+          rectsOverlap(f.rectNorm, candidate.rectNorm, 0.008),
       );
       if (overlaps) return false;
       fields.push(candidate);
@@ -401,10 +480,14 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
 
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
-          const str = item.str.trim();
+          const str = item.str;
+          const trimmed = str.trim();
           const b = bounds[i];
 
-          if (/^[☐□\\[\\s\\]\\(\\)\\.]*$/.test(str) && /[☐□\\[]/.test(str)) {
+          if (
+            /^[☐□\\[\\s\\]\\(\\)\\.]*$/.test(trimmed) &&
+            /[☐□\\[]/.test(trimmed)
+          ) {
             tryPushField(
               fields,
               pageNumber,
@@ -414,43 +497,45 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
               {
                 x: b.x,
                 y: b.y,
-                w: Math.max(b.w, 0.025),
-                h: Math.max(b.h, 0.018),
+                w: Math.max(b.w, 0.018),
+                h: Math.max(b.h, 0.016),
               },
             );
             continue;
           }
 
-          const labelMatch = str.match(
+          const labelMatch = trimmed.match(
             /^(.{1,60}?)\\s*[:]?\\s*([_.…\\-]{2,}|\\.{3,})\\s*$/,
           );
-          const colonLabel = str.match(/^(.{1,60}?)\\s*:\\s*$/);
-          const trailingColon = /:\\s*$/.test(str) && !labelMatch;
+          const colonLabel = trimmed.match(/^(.{1,60}?)\\s*:\\s*$/);
+          const trailingColon = /:\\s*$/.test(trimmed) && !labelMatch;
 
           if (labelMatch) {
             const label = cleanLabel(labelMatch[1]);
-            const blankRatio = Math.min(
-              0.6,
-              Math.max(0.16, (labelMatch[2] || '').length * 0.011),
-            );
-            tryPushField(fields, pageNumber, idxRef, label, null, {
-              x: Math.min(0.92, b.x + Math.min(b.w * 0.4, 0.25)),
-              y: b.y,
-              w: blankRatio,
-              h: Math.max(b.h, 0.018),
-            });
+            const blankPart = labelMatch[2];
+            const rect =
+              blankRectFromSpan(b, trimmed, blankPart) ||
+              gapRectAfterLabel(b, null);
+            if (rect) {
+              tryPushField(fields, pageNumber, idxRef, label, null, rect);
+            }
             continue;
           }
 
           if (colonLabel || trailingColon) {
-            const label = cleanLabel(str.replace(/:\\s*$/, ''));
+            const label = cleanLabel(trimmed.replace(/:\\s*$/, ''));
             let usedNeighbor = false;
-            for (let j = i + 1; j < Math.min(i + 6, items.length); j++) {
+            let nextSameLine = null;
+            for (let j = i + 1; j < Math.min(i + 8, items.length); j++) {
               const nb = bounds[j];
               if (!sameLine(b, nb)) break;
-              if (nb.x < b.x + b.w - 0.01) continue;
+              if (nb.x + nb.w <= b.x + b.w * 0.5) continue;
+              if (!nextSameLine && nb.x >= b.x + b.w - 0.02) {
+                nextSameLine = nb;
+              }
               const nstr = items[j].str.trim();
               if (isBlankish(nstr)) {
+                // Use the blank item's measured bounds exactly.
                 usedNeighbor = tryPushField(
                   fields,
                   pageNumber,
@@ -459,42 +544,24 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
                   null,
                   {
                     x: nb.x,
-                    y: Math.min(b.y, nb.y),
-                    w: Math.max(nb.w, 0.18),
-                    h: Math.max(b.h, nb.h, 0.018),
-                  },
-                );
-                break;
-              }
-              if (nstr.length <= 2 && !/[a-zA-Z0-9]/.test(nstr)) {
-                usedNeighbor = tryPushField(
-                  fields,
-                  pageNumber,
-                  idxRef,
-                  label,
-                  null,
-                  {
-                    x: Math.min(0.9, b.x + b.w + 0.008),
-                    y: b.y - 0.002,
-                    w: Math.min(0.5, Math.max(0.18, nb.x - (b.x + b.w))),
-                    h: Math.max(b.h, 0.02),
+                    y: nb.y,
+                    w: Math.max(nb.w, 0.05),
+                    h: Math.max(nb.h, b.h * 0.9, 0.014),
                   },
                 );
                 break;
               }
             }
             if (!usedNeighbor) {
-              tryPushField(fields, pageNumber, idxRef, label, null, {
-                x: Math.min(0.9, b.x + b.w + 0.01),
-                y: b.y - 0.002,
-                w: Math.min(0.45, Math.max(0.18, 0.88 - (b.x + b.w))),
-                h: Math.max(b.h, 0.02),
-              });
+              const gap = gapRectAfterLabel(b, nextSameLine);
+              if (gap) {
+                tryPushField(fields, pageNumber, idxRef, label, null, gap);
+              }
             }
             continue;
           }
 
-          if (isBlankish(str)) {
+          if (isBlankish(trimmed)) {
             let label = 'Blank ' + (idxRef.n + 1);
             for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
               const pb = bounds[j];
@@ -506,17 +573,62 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
                 break;
               }
             }
-            tryPushField(fields, pageNumber, idxRef, label, null, {
-              x: b.x,
-              y: b.y,
-              w: Math.max(b.w, 0.16),
-              h: Math.max(b.h, 0.018),
-            });
+            // Prefer underscore substring if mixed; else full item box.
+            const span = trimmed.match(/[_.…\\-]{2,}|\\.{3,}/);
+            const rect = span
+              ? blankRectFromSpan(b, trimmed, span[0]) || b
+              : { x: b.x, y: b.y, w: b.w, h: Math.max(b.h, 0.014) };
+            tryPushField(fields, pageNumber, idxRef, label, null, rect);
+            continue;
+          }
+
+          // Drawn-line blanks (no underscore glyphs): short left labels with
+          // a wide empty gap to the right — place the field in that gap.
+          if (looksLikeFieldLabel(trimmed) && b.x < 0.45) {
+            let nextSameLine = null;
+            for (let j = 0; j < items.length; j++) {
+              if (j === i) continue;
+              const nb = bounds[j];
+              if (!sameLine(b, nb)) continue;
+              if (nb.x <= b.x + b.w - 0.01) continue;
+              if (!nextSameLine || nb.x < nextSameLine.x) {
+                nextSameLine = nb;
+              }
+            }
+            const gap = gapRectAfterLabel(b, nextSameLine);
+            if (gap && gap.w >= 0.14) {
+              tryPushField(fields, pageNumber, idxRef, cleanLabel(trimmed), null, gap);
+            }
           }
         }
       });
 
       return fields;
+    }
+
+    function looksLikeFieldLabel(str) {
+      const s = String(str || '').trim();
+      if (s.length < 2 || s.length > 55) return false;
+      if (/^[•·\\-]/.test(s)) return false;
+      if (/[.!?]$/.test(s) && s.length > 25) return false;
+      // Long prose sentences
+      if ((s.match(/\\s+/g) || []).length >= 8) return false;
+      const exclude =
+        /^(CLIENT DETAILS|COMPULSORY SECTION|BUSINESS APPLICATION|FILLABLE FORM EXAMPLE|NOTES?|INSTRUCTIONS?)$/i;
+      if (exclude.test(s)) return false;
+      if (/\\*$/.test(s)) return true;
+      if (
+        /(NUMBER|NAME|EMAIL|CODE|CELL|PHONE|SURNAME|INCOME|INVESTMENT|ADDRESS|DATE|SIGNATURE|ENTITY|REGISTRATION|PURPOSE)/i.test(
+          s,
+        )
+      ) {
+        return true;
+      }
+      // Short mostly-uppercase labels (e.g. ENTITY NUMBER)
+      const letters = s.replace(/[^a-zA-Z]/g, '');
+      if (!letters) return false;
+      const upperCount = (letters.match(/[A-Z]/g) || []).length;
+      return upperCount / letters.length >= 0.7 && s.length <= 40;
     }
 
     async function renderPage(pdf, pageNum, maxWidth) {
@@ -544,7 +656,12 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       const textContent = await page.getTextContent();
       pageTextData.set(pageNum, {
         items: textContent.items || [],
-        viewport: { width: viewport.width, height: viewport.height },
+        viewport: {
+          width: viewport.width,
+          height: viewport.height,
+          scale: viewport.scale,
+          transform: viewport.transform.slice(),
+        },
       });
 
       const layer = document.createElement('div');
@@ -566,7 +683,7 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       pageEls.set(pageNum, pageEl);
 
       if (formFields.length) {
-        paintFormOverlays();
+        schedulePaintFormOverlays();
       }
 
       post({ type: 'pageReady', pageNumber: pageNum });
@@ -599,18 +716,18 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
 
     window.__kvSetFormFields = function (fields) {
       formFields = Array.isArray(fields) ? fields : [];
-      paintFormOverlays();
+      schedulePaintFormOverlays();
     };
 
     window.__kvSetSelectedField = function (id) {
       selectedFieldId = id || null;
-      paintFormOverlays();
+      schedulePaintFormOverlays();
     };
 
     window.__kvSetFieldValue = function (id, value) {
       if (!id) return;
       fieldValues[id] = value == null ? '' : String(value);
-      paintFormOverlays();
+      schedulePaintFormOverlays();
     };
 
     window.__kvRunHeuristicDetect = function () {
