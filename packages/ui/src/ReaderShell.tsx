@@ -34,7 +34,7 @@ type ReaderShellProps = {
   onClearFile?: () => void;
   onRenameFile: (name: string) => void;
   onSaveFile: (name: string) => void;
-  /** Opt-in form detection — never runs on open. */
+  /** Opt-in AI form scan — never runs on open. */
   onDetectForms?: () => void;
   formsDetectLabel?: string;
   formsDetectDisabled?: boolean;

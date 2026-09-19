@@ -100,9 +100,13 @@ Deno.serve(async (req: Request) => {
 Return ONLY valid JSON (no markdown) matching:
 {"fields":[{"id":"string","name":"string","type":"text|checkbox|radio|dropdown|signature|unknown","pageNumber":1,"rectNorm":{"x":0,"y":0,"w":0,"h":0}}]}
 Rules:
-- rectNorm is normalized 0–1 with origin at the TOP-LEFT of that page image.
+- rectNorm is normalized 0–1 with origin at the TOP-LEFT of the FULL page image (not the label text).
+- x,y = top-left corner of the blank INPUT area; w,h = size of that blank only.
+- Draw TIGHT boxes around blanks (underscores, empty boxes, signature lines). Prefer slightly undersized boxes over oversized ones.
+- Do not include the printed label in the box; place the box on the writable blank itself.
+- Checkboxes should be roughly square and cover only the checkbox glyph/box.
 - pageNumber must match the page number given for each image.
-- Report all empty blanks on the page (underscores, boxes, signature lines); do not stop after a few.
+- Report all empty blanks on the page; do not stop after a few.
 - Prefer empty blanks, not filled text.
 - name should be a short semantic label (e.g. "Full Name", "Date", "Signature").
 - Skip decorative lines and table grid lines that are not fillable.

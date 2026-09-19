@@ -4,18 +4,20 @@
  */
 
 import React, {useCallback, useEffect, useRef} from 'react';
-import {Alert, InteractionManager} from 'react-native';
+import {Alert, ScrollView} from 'react-native';
 import {
   pickPdfFile,
+  preloadFormAnalysis,
   renamePdfFile,
   useAnnotationStore,
   useDefinitionStore,
   useDocumentStore,
   useFormAnalysisStore,
+  usePinnedAnnotationStore,
+  type RectNorm,
 } from '@kiteview/core';
 import {
   PdfViewer,
-  type DetectedFormField,
   type FormPageImagePayload,
   type PdfViewerHandle,
 } from '@kiteview/pdf-engine';
@@ -34,7 +36,6 @@ registerMacosPdfPicker();
 function App() {
   const pdfRef = useRef<PdfViewerHandle>(null);
   const page1ReadyRef = useRef(false);
-  const heuristicStartedRef = useRef(false);
   const visionStartedRef = useRef(false);
 
   const file = useDocumentStore(s => s.file);
@@ -59,58 +60,75 @@ function App() {
   const annotationStatus = useAnnotationStore(s => s.status);
   const annotation = useAnnotationStore(s => s.annotation);
   const annotationError = useAnnotationStore(s => s.error);
+  const annotationRect = useAnnotationStore(s => s.rectNorm);
+  const viewingPinnedId = useAnnotationStore(s => s.viewingPinnedId);
   const requestAnnotation = useAnnotationStore(s => s.requestAnnotation);
+  const showPinnedAnnotation = useAnnotationStore(s => s.showPinnedAnnotation);
   const setAnnotationMode = useAnnotationStore(s => s.setMode);
   const clearAnnotation = useAnnotationStore(s => s.clearAnnotation);
+
+  const pinnedPins = usePinnedAnnotationStore(s => s.pins);
+  const selectedPinnedId = usePinnedAnnotationStore(s => s.selectedId);
+  const loadPinnedForDocument = usePinnedAnnotationStore(s => s.loadForDocument);
+  const pinAnnotation = usePinnedAnnotationStore(s => s.pinAnnotation);
+  const unpinAnnotation = usePinnedAnnotationStore(s => s.unpinAnnotation);
+  const selectPinned = usePinnedAnnotationStore(s => s.selectPinned);
+  const clearPinnedActive = usePinnedAnnotationStore(s => s.clearActive);
+  const clearPinnedDocument = usePinnedAnnotationStore(s => s.clearDocument);
+
   const formStatus = useFormAnalysisStore(s => s.status);
   const formFields = useFormAnalysisStore(s => s.fields);
   const selectedFieldId = useFormAnalysisStore(s => s.selectedFieldId);
   const formError = useFormAnalysisStore(s => s.error);
   const cascadeStage = useFormAnalysisStore(s => s.cascadeStage);
   const startDetect = useFormAnalysisStore(s => s.startDetect);
-  const applyHeuristicFields = useFormAnalysisStore(s => s.applyHeuristicFields);
   const applyVisionFromPages = useFormAnalysisStore(s => s.applyVisionFromPages);
   const selectFormField = useFormAnalysisStore(s => s.selectField);
   const setFieldValue = useFormAnalysisStore(s => s.setFieldValue);
   const clearFormAnalysis = useFormAnalysisStore(s => s.clear);
 
-  const cascadeBusy =
-    cascadeStage === 'acroform' ||
-    cascadeStage === 'heuristic' ||
-    cascadeStage === 'vision';
+  const documentKey = file?.uri ?? null;
 
-  const tryHeuristic = useCallback(() => {
-    if (cascadeStage !== 'heuristic') return;
-    if (!page1ReadyRef.current || heuristicStartedRef.current) return;
-    heuristicStartedRef.current = true;
-    pdfRef.current?.runHeuristicDetect();
-  }, [cascadeStage]);
+  useEffect(() => {
+    preloadFormAnalysis();
+  }, []);
+
+  useEffect(() => {
+    if (!documentKey) {
+      clearPinnedDocument();
+      return;
+    }
+    preloadFormAnalysis();
+    void loadPinnedForDocument(documentKey);
+  }, [documentKey, loadPinnedForDocument, clearPinnedDocument]);
+
+  const cascadeBusy =
+    cascadeStage === 'acroform' || cascadeStage === 'vision';
 
   const tryVision = useCallback(() => {
     if (cascadeStage !== 'vision') return;
     if (!page1ReadyRef.current || visionStartedRef.current) return;
     visionStartedRef.current = true;
-    // Sparse fallback only — page 1 for speed.
     pdfRef.current?.capturePagesForDetect(1);
   }, [cascadeStage]);
 
   useEffect(() => {
-    tryHeuristic();
-  }, [tryHeuristic]);
-
-  useEffect(() => {
     tryVision();
   }, [tryVision]);
+
+  const resetPanels = useCallback(() => {
+    clearDefinition();
+    clearAnnotation();
+    clearPinnedActive();
+  }, [clearAnnotation, clearDefinition, clearPinnedActive]);
 
   const onSelectFile = useCallback(async () => {
     try {
       const picked = await pickPdfFile();
       if (picked) {
         page1ReadyRef.current = false;
-        heuristicStartedRef.current = false;
         visionStartedRef.current = false;
-        clearDefinition();
-        clearAnnotation();
+        resetPanels();
         clearFormAnalysis();
         setFile(picked);
       }
@@ -118,49 +136,48 @@ function App() {
       const message = err instanceof Error ? err.message : String(err);
       Alert.alert('Could not open file', message);
     }
-  }, [clearAnnotation, clearDefinition, clearFormAnalysis, setFile]);
+  }, [clearFormAnalysis, resetPanels, setFile]);
 
   const onClearFile = useCallback(() => {
     page1ReadyRef.current = false;
-    heuristicStartedRef.current = false;
     visionStartedRef.current = false;
-    clearDefinition();
-    clearAnnotation();
+    resetPanels();
     clearFormAnalysis();
+    clearPinnedDocument();
     clearFile();
-  }, [clearAnnotation, clearDefinition, clearFormAnalysis, clearFile]);
+  }, [
+    clearFile,
+    clearFormAnalysis,
+    clearPinnedDocument,
+    resetPanels,
+  ]);
 
-  const onDetectForms = useCallback(() => {
+  const onAiScanForms = useCallback(() => {
     if (!file?.base64) {
       Alert.alert(
-        'Cannot detect forms',
+        'Cannot scan forms',
         'Re-open the PDF so form data can be analyzed.',
       );
       return;
     }
-    heuristicStartedRef.current = false;
     visionStartedRef.current = false;
-    InteractionManager.runAfterInteractions(() => {
-      void startDetect(file.base64!);
-    });
+    void startDetect(file.base64);
   }, [file, startDetect]);
 
   const onSelectTab = useCallback(
     (id: string) => {
-      clearDefinition();
-      clearAnnotation();
+      resetPanels();
       selectTab(id);
     },
-    [clearAnnotation, clearDefinition, selectTab],
+    [resetPanels, selectTab],
   );
 
   const onCloseTab = useCallback(
     (id: string) => {
-      clearDefinition();
-      clearAnnotation();
+      resetPanels();
       closeTab(id);
     },
-    [clearAnnotation, clearDefinition, closeTab],
+    [closeTab, resetPanels],
   );
 
   const onSaveFile = useCallback(
@@ -181,39 +198,93 @@ function App() {
 
   const onWordClick = useCallback(
     (word: string) => {
-      clearAnnotation();
       void requestDefinition(word);
     },
-    [clearAnnotation, requestDefinition],
+    [requestDefinition],
   );
 
   const onPhraseSelect = useCallback(
-    (phrase: string, pageNumber: number, context?: string) => {
-      clearDefinition();
-      void requestAnnotation(phrase, pageNumber, undefined, context);
+    (
+      phrase: string,
+      pageNumber: number,
+      context?: string,
+      rectNorm?: RectNorm,
+    ) => {
+      clearPinnedActive();
+      void requestAnnotation(
+        phrase,
+        pageNumber,
+        undefined,
+        context,
+        rectNorm,
+      );
     },
-    [clearDefinition, requestAnnotation],
+    [clearPinnedActive, requestAnnotation],
   );
+
+  const onPinnedAnnotationClick = useCallback(
+    (id: string) => {
+      const pin = usePinnedAnnotationStore
+        .getState()
+        .pins.find(p => p.id === id);
+      if (!pin) return;
+      selectPinned(id);
+      showPinnedAnnotation(pin);
+    },
+    [selectPinned, showPinnedAnnotation],
+  );
+
+  const onPin = useCallback(async () => {
+    if (!file?.uri || !annotation || !annotationRect || !activePhrase) {
+      Alert.alert(
+        'Cannot pin',
+        'Select the phrase again so its position on the page is known.',
+      );
+      return;
+    }
+    const pageNumber = useAnnotationStore.getState().pageNumber ?? 1;
+    const pin = await pinAnnotation({
+      documentKey: file.uri,
+      phrase: activePhrase,
+      content: annotation.content,
+      mode: annotationMode,
+      pageNumber,
+      rectNorm: annotationRect,
+    });
+    if (pin) {
+      showPinnedAnnotation(pin);
+    } else {
+      Alert.alert('Could not pin', 'The annotation could not be saved. Try selecting the phrase again.');
+    }
+  }, [
+    activePhrase,
+    annotation,
+    annotationMode,
+    annotationRect,
+    file?.uri,
+    pinAnnotation,
+    showPinnedAnnotation,
+  ]);
+
+  const onUnpin = useCallback(async () => {
+    if (!viewingPinnedId) return;
+    await unpinAnnotation(viewingPinnedId);
+    clearAnnotation();
+  }, [clearAnnotation, unpinAnnotation, viewingPinnedId]);
+
+  const onCloseAnnotation = useCallback(() => {
+    clearAnnotation();
+    clearPinnedActive();
+  }, [clearAnnotation, clearPinnedActive]);
 
   const onPageReady = useCallback(
     (pageNumber: number) => {
       if (pageNumber === 1) {
         page1ReadyRef.current = true;
-        tryHeuristic();
         tryVision();
       }
     },
-    [tryHeuristic, tryVision],
-  );
-
-  const onHeuristicFields = useCallback(
-    (fields: DetectedFormField[]) => {
-      if (useFormAnalysisStore.getState().cascadeStage !== 'heuristic') {
-        return;
-      }
-      applyHeuristicFields(fields);
-    },
-    [applyHeuristicFields],
+    [tryVision],
   );
 
   const onFormPageImages = useCallback(
@@ -237,21 +308,19 @@ function App() {
 
   const formsDetectLabel = cascadeBusy
     ? cascadeStage === 'vision'
-      ? formFields.length > 0
-        ? 'Refining…'
-        : 'Scanning page…'
-      : cascadeStage === 'heuristic'
-        ? formFields.length > 0
-          ? 'Checking layout…'
-          : 'Checking layout…'
-        : 'Detecting…'
-    : formStatus === 'ready'
-      ? 'Re-detect forms'
-      : formStatus === 'none'
-        ? 'Scan again'
-        : 'Detect forms';
+      ? 'Scanning page…'
+      : 'Detecting…'
+    : formStatus === 'ready' || formStatus === 'none'
+      ? 'AI scan again'
+      : 'AI scan';
 
   const showFormOverlays = formFields.length > 0;
+  const canPin = Boolean(
+    annotationStatus === 'ready' &&
+      annotation &&
+      annotationRect &&
+      !viewingPinnedId,
+  );
 
   return (
     <ReaderShell
@@ -263,24 +332,17 @@ function App() {
       onSelectTab={onSelectTab}
       onCloseTab={onCloseTab}
       onClearFile={file ? onClearFile : undefined}
-      onDetectForms={file ? onDetectForms : undefined}
+      onDetectForms={file ? onAiScanForms : undefined}
       formsDetectLabel={formsDetectLabel}
       formsDetectDisabled={cascadeBusy}
       formFieldCount={showFormOverlays ? formFields.length : undefined}
       onRenameFile={renameFile}
       onSaveFile={onSaveFile}
       leftGutter={
-        activePhrase ? (
-          <AnnotationPanel
-            phrase={activePhrase}
-            mode={annotationMode}
-            status={annotationStatus}
-            annotation={annotation}
-            error={annotationError}
-            onModeChange={setAnnotationMode}
-            onClose={clearAnnotation}
-          />
-        ) : (
+        <ScrollView
+          style={{flex: 1}}
+          contentContainerStyle={{paddingBottom: 24}}
+          showsVerticalScrollIndicator={false}>
           <DefinitionPanel
             word={activeWord}
             status={status}
@@ -288,7 +350,24 @@ function App() {
             error={error}
             onClose={clearDefinition}
           />
-        )
+          <AnnotationPanel
+            phrase={activePhrase}
+            mode={annotationMode}
+            status={annotationStatus}
+            annotation={annotation}
+            error={annotationError}
+            pinned={Boolean(viewingPinnedId)}
+            canPin={canPin}
+            onModeChange={setAnnotationMode}
+            onPin={() => {
+              void onPin();
+            }}
+            onUnpin={() => {
+              void onUnpin();
+            }}
+            onClose={onCloseAnnotation}
+          />
+        </ScrollView>
       }
       rightGutter={
         file && formStatus !== 'idle' ? (
@@ -308,12 +387,14 @@ function App() {
           base64={file.base64}
           formFields={showFormOverlays ? formFields : undefined}
           selectedFieldId={selectedFieldId}
+          pinnedAnnotations={pinnedPins}
+          selectedPinnedId={selectedPinnedId ?? viewingPinnedId}
           onWordClick={onWordClick}
           onPhraseSelect={onPhraseSelect}
+          onPinnedAnnotationClick={onPinnedAnnotationClick}
           onPageReady={onPageReady}
           onFormFieldClick={selectFormField}
           onFormFieldChange={setFieldValue}
-          onHeuristicFields={onHeuristicFields}
           onFormPageImages={onFormPageImages}
           onError={message => Alert.alert('PDF error', message)}
         />

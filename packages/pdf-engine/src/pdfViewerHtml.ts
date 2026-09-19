@@ -24,7 +24,7 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       width: 100%;
       background: #F5F5F7;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      overflow-x: hidden;
+      overflow-x: auto;
       overflow-y: auto;
       scrollbar-gutter: stable;
     }
@@ -35,11 +35,12 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       flex-direction: column;
       align-items: center;
       gap: 16px;
-      padding: 24px 0 48px;
+      padding: 24px 148px 48px;
       min-height: 100%;
       width: 100%;
       max-width: 100%;
-      overflow-x: hidden;
+      box-sizing: border-box;
+      overflow-x: visible;
     }
     .page {
       display: block;
@@ -47,6 +48,7 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       background: #fff;
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
       max-width: 100%;
+      overflow: visible;
     }
     .page canvas { display: block; }
     .textLayer {
@@ -82,6 +84,61 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       color: transparent;
       border-radius: 2px;
       padding: 0;
+    }
+    .pinOverlay {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+      overflow: visible;
+    }
+    .pinnedHighlight {
+      position: absolute;
+      background: rgba(255, 196, 0, 0.38);
+      border-radius: 2px;
+      pointer-events: auto;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    .pinnedHighlight.selected {
+      background: rgba(255, 168, 0, 0.55);
+      box-shadow: 0 0 0 1px rgba(200, 120, 0, 0.45);
+    }
+    .pinnedNote {
+      position: absolute;
+      width: 128px;
+      max-width: 34%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #FFFDF7;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      pointer-events: auto;
+      cursor: pointer;
+      box-sizing: border-box;
+      z-index: 5;
+    }
+    .pinnedNote.selected {
+      border-color: rgba(0, 113, 227, 0.55);
+      box-shadow: 0 2px 12px rgba(0, 113, 227, 0.18);
+    }
+    .pinnedNote .pinPhrase {
+      font: 600 11px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #1d1d1f;
+      margin: 0 0 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .pinnedNote .pinBody {
+      font: 400 11px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #3a3a3c;
+      margin: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .formOverlay {
       position: absolute;
@@ -152,6 +209,8 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     let pdfDoc = null;
     let formFields = [];
     let selectedFieldId = null;
+    let pinnedAnnotations = [];
+    let selectedPinnedId = null;
     const fieldValues = {};
     const pageEls = new Map();
     const pageTextData = new Map();
@@ -290,6 +349,30 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       }
     }
 
+    function selectionRectNorm(selection, pageEl) {
+      try {
+        if (!selection || selection.rangeCount === 0 || !pageEl) return null;
+        const range = selection.getRangeAt(0);
+        const selRect = range.getBoundingClientRect();
+        const pageRect = pageEl.getBoundingClientRect();
+        const pageW = pageRect.width || pageEl.clientWidth;
+        const pageH = pageRect.height || pageEl.clientHeight;
+        if (!pageW || !pageH || !selRect.width || !selRect.height) return null;
+        const x = (selRect.left - pageRect.left) / pageW;
+        const y = (selRect.top - pageRect.top) / pageH;
+        const w = selRect.width / pageW;
+        const h = selRect.height / pageH;
+        return {
+          x: Math.max(0, Math.min(1, x)),
+          y: Math.max(0, Math.min(1, y)),
+          w: Math.max(0.01, Math.min(1, w)),
+          h: Math.max(0.008, Math.min(1, h)),
+        };
+      } catch {
+        return null;
+      }
+    }
+
     let selectionTimer = null;
     document.addEventListener('selectionchange', () => {
       if (selectionTimer) clearTimeout(selectionTimer);
@@ -303,10 +386,93 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         const pageNumber = page ? Array.from(viewer.children).indexOf(page) + 1 : 0;
         if (pageNumber > 0) {
           const context = selectionContext(selection, phrase);
-          post({type: 'phraseSelect', phrase, pageNumber, context: context || undefined});
+          const rectNorm = selectionRectNorm(selection, page);
+          post({
+            type: 'phraseSelect',
+            phrase,
+            pageNumber,
+            context: context || undefined,
+            rectNorm: rectNorm || undefined,
+          });
         }
       }, 80);
     });
+
+    function paintPinnedAnnotations() {
+      pageEls.forEach((pageEl) => {
+        let overlay = pageEl.querySelector('.pinOverlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.className = 'pinOverlay';
+          pageEl.appendChild(overlay);
+        }
+        overlay.innerHTML = '';
+        const pageNum = Number(pageEl.dataset.pageNumber);
+        const pageW = pageEl.clientWidth || pageEl.offsetWidth;
+        const pageH = pageEl.clientHeight || pageEl.offsetHeight;
+        if (!pageW || !pageH) return;
+
+        pinnedAnnotations
+          .filter((p) => Number(p.pageNumber) === pageNum)
+          .forEach((pin) => {
+            const r = pin.rectNorm || {};
+            const selected = pin.id === selectedPinnedId;
+            const hi = document.createElement('div');
+            hi.className = 'pinnedHighlight' + (selected ? ' selected' : '');
+            hi.dataset.pinId = pin.id;
+            hi.style.left = (r.x || 0) * pageW + 'px';
+            hi.style.top = (r.y || 0) * pageH + 'px';
+            hi.style.width = Math.max(8, (r.w || 0) * pageW) + 'px';
+            hi.style.height = Math.max(8, (r.h || 0) * pageH) + 'px';
+            hi.addEventListener('mousedown', (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              selectedPinnedId = pin.id;
+              schedulePaintPinnedAnnotations();
+              post({ type: 'pinnedAnnotationClick', id: pin.id });
+            });
+            overlay.appendChild(hi);
+
+            const note = document.createElement('div');
+            note.className = 'pinnedNote' + (selected ? ' selected' : '');
+            note.dataset.pinId = pin.id;
+            const noteW = Math.min(128, pageW * 0.32);
+            const topPx = Math.max(4, (r.y || 0) * pageH);
+            note.style.top = topPx + 'px';
+            note.style.width = noteW + 'px';
+            if (pin.side === 'left') {
+              note.style.left = (-noteW - 12) + 'px';
+              note.style.right = 'auto';
+            } else {
+              note.style.left = 'auto';
+              note.style.right = (-noteW - 12) + 'px';
+            }
+            const phraseEl = document.createElement('p');
+            phraseEl.className = 'pinPhrase';
+            phraseEl.textContent = String(pin.phrase || '');
+            const bodyEl = document.createElement('p');
+            bodyEl.className = 'pinBody';
+            bodyEl.textContent = String(pin.content || '');
+            note.appendChild(phraseEl);
+            note.appendChild(bodyEl);
+            note.addEventListener('mousedown', (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              selectedPinnedId = pin.id;
+              schedulePaintPinnedAnnotations();
+              post({ type: 'pinnedAnnotationClick', id: pin.id });
+            });
+            overlay.appendChild(note);
+          });
+      });
+    }
+
+    function schedulePaintPinnedAnnotations() {
+      requestAnimationFrame(() => {
+        paintPinnedAnnotations();
+      });
+    }
+
     function paintFormOverlays() {
       pageEls.forEach((pageEl) => {
         let overlay = pageEl.querySelector('.formOverlay');
@@ -756,6 +922,9 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       if (formFields.length) {
         schedulePaintFormOverlays();
       }
+      if (pinnedAnnotations.length) {
+        schedulePaintPinnedAnnotations();
+      }
 
       post({ type: 'pageReady', pageNumber: pageNum });
     }
@@ -788,6 +957,16 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     window.__kvSetFormFields = function (fields) {
       formFields = Array.isArray(fields) ? fields : [];
       schedulePaintFormOverlays();
+    };
+
+    window.__kvSetPinnedAnnotations = function (pins) {
+      pinnedAnnotations = Array.isArray(pins) ? pins : [];
+      schedulePaintPinnedAnnotations();
+    };
+
+    window.__kvSetSelectedPinnedId = function (id) {
+      selectedPinnedId = id || null;
+      schedulePaintPinnedAnnotations();
     };
 
     window.__kvSetSelectedField = function (id) {

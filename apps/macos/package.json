@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "start": "react-native start",
-    "macos": "react-native run-macos",
-    "pods": "pod install --project-directory=macos",
+    "macos": "bash ../../scripts/link-macos-node-modules.sh && react-native run-macos",
+    "pods": "bash ../../scripts/link-macos-node-modules.sh && pod install --project-directory=macos",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "jest"
@@ -14,7 +14,9 @@
     "@kiteview/core": "*",
     "@kiteview/pdf-engine": "*",
     "@kiteview/ui": "*",
+    "@react-native-async-storage/async-storage": "^3.1.1",
     "@react-native/new-app-screen": "0.81.2",
+    "pdf-lib": "^1.17.1",
     "react": "19.1.4",
     "react-native": "0.81.2",
     "react-native-macos": "0.81.9",
