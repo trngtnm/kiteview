@@ -21,6 +21,7 @@ registerMacosPdfPicker();
 function App() {
   const file = useDocumentStore(s => s.file);
   const setFile = useDocumentStore(s => s.setFile);
+  const renameFile = useDocumentStore(s => s.renameFile);
   const clearFile = useDocumentStore(s => s.clearFile);
 
   const activeWord = useDefinitionStore(s => s.activeWord);
@@ -58,8 +59,10 @@ function App() {
   return (
     <ReaderShell
       fileName={file?.name}
+      logoSource={require('./assets/kiteview-logo.png')}
       onSelectFile={onSelectFile}
       onClearFile={file ? onClearFile : undefined}
+      onRenameFile={renameFile}
       leftGutter={
         <DefinitionPanel
           word={activeWord}

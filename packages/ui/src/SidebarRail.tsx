@@ -1,17 +1,18 @@
 import React from 'react';
-import {Image, StyleSheet, Text, View} from 'react-native';
+import {Image, ImageSourcePropType, StyleSheet, Text, View} from 'react-native';
 import {SelectFileButton} from './SelectFileButton';
 import {RAIL_WIDTH, theme} from './theme';
-import wordmark from './assets/kiteview-logo.png';
 
 type SidebarRailProps = {
   fileName?: string | null;
+  logoSource: ImageSourcePropType;
   onSelectFile: () => void;
   onClearFile?: () => void;
 };
 
 export function SidebarRail({
   fileName,
+  logoSource,
   onSelectFile,
   onClearFile,
 }: SidebarRailProps) {
@@ -21,7 +22,7 @@ export function SidebarRail({
         <Image
           accessibilityLabel="KiteView"
           resizeMode="contain"
-          source={wordmark}
+          source={logoSource}
           style={styles.logo}
         />
       </View>
@@ -61,7 +62,7 @@ const styles = StyleSheet.create({
     borderRightColor: theme.railBorder,
   },
   header: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.railBg,
     paddingHorizontal: 16,
     paddingTop: 18,
     paddingBottom: 14,
@@ -70,8 +71,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 168,
-    height: 52,
+    width: 188,
+    height: 105,
   },
   body: {
     paddingTop: 18,
