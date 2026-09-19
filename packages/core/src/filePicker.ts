@@ -15,6 +15,8 @@ export type AnnotatePhraseFn = (
   anonKey: string,
   phrase: string,
   pageNumber?: number,
+  annotationType?: string,
+  context?: string,
 ) => Promise<unknown>;
 
 let pickPdfFileImpl: PickPdfFileFn | null = null;
@@ -39,11 +41,20 @@ export function annotatePhrase(
   anonKey: string,
   phrase: string,
   pageNumber?: number,
+  annotationType?: string,
+  context?: string,
 ): Promise<unknown> {
   if (!annotatePhraseImpl) {
     throw new Error('Native phrase annotation is not registered');
   }
-  return annotatePhraseImpl(endpoint, anonKey, phrase, pageNumber);
+  return annotatePhraseImpl(
+    endpoint,
+    anonKey,
+    phrase,
+    pageNumber,
+    annotationType,
+    context,
+  );
 }
 
 export async function pickPdfFile(): Promise<PickedPdfFile | null> {

@@ -6,13 +6,12 @@
 import React, {useCallback, useEffect, useRef} from 'react';
 import {Alert, InteractionManager} from 'react-native';
 import {
-  getEnv,
   pickPdfFile,
   renamePdfFile,
+  useAnnotationStore,
   useDefinitionStore,
   useDocumentStore,
   useFormAnalysisStore,
-  useParaphraseStore,
 } from '@kiteview/core';
 import {
   PdfViewer,
@@ -21,9 +20,9 @@ import {
   type PdfViewerHandle,
 } from '@kiteview/pdf-engine';
 import {
+  AnnotationPanel,
   DefinitionPanel,
   FormFieldsPanel,
-  ParaphrasePanel,
   ReaderShell,
 } from '@kiteview/ui';
 import {bootstrapEnv} from './src/bootstrapEnv';
@@ -55,14 +54,14 @@ function App() {
   const requestDefinition = useDefinitionStore(s => s.requestDefinition);
   const clearDefinition = useDefinitionStore(s => s.clearDefinition);
 
-  const activePhrase = useParaphraseStore(s => s.activePhrase);
-  const paraphraseStatus = useParaphraseStore(s => s.status);
-  const paraphraseAnnotation = useParaphraseStore(s => s.annotation);
-  const paraphraseError = useParaphraseStore(s => s.error);
-  const requestParaphrase = useParaphraseStore(s => s.requestParaphrase);
-  const receiveParaphrase = useParaphraseStore(s => s.receiveParaphrase);
-  const failParaphrase = useParaphraseStore(s => s.failParaphrase);
-  const clearParaphrase = useParaphraseStore(s => s.clearParaphrase);
+  const activePhrase = useAnnotationStore(s => s.activePhrase);
+  const annotationMode = useAnnotationStore(s => s.mode);
+  const annotationStatus = useAnnotationStore(s => s.status);
+  const annotation = useAnnotationStore(s => s.annotation);
+  const annotationError = useAnnotationStore(s => s.error);
+  const requestAnnotation = useAnnotationStore(s => s.requestAnnotation);
+  const setAnnotationMode = useAnnotationStore(s => s.setMode);
+  const clearAnnotation = useAnnotationStore(s => s.clearAnnotation);
   const formStatus = useFormAnalysisStore(s => s.status);
   const formFields = useFormAnalysisStore(s => s.fields);
   const selectedFieldId = useFormAnalysisStore(s => s.selectedFieldId);
@@ -111,6 +110,7 @@ function App() {
         heuristicStartedRef.current = false;
         visionStartedRef.current = false;
         clearDefinition();
+        clearAnnotation();
         clearFormAnalysis();
         setFile(picked);
       }
@@ -118,16 +118,17 @@ function App() {
       const message = err instanceof Error ? err.message : String(err);
       Alert.alert('Could not open file', message);
     }
-  }, [clearDefinition, clearFormAnalysis, setFile]);
+  }, [clearAnnotation, clearDefinition, clearFormAnalysis, setFile]);
 
   const onClearFile = useCallback(() => {
     page1ReadyRef.current = false;
     heuristicStartedRef.current = false;
     visionStartedRef.current = false;
     clearDefinition();
+    clearAnnotation();
     clearFormAnalysis();
     clearFile();
-  }, [clearDefinition, clearFormAnalysis, clearFile]);
+  }, [clearAnnotation, clearDefinition, clearFormAnalysis, clearFile]);
 
   const onDetectForms = useCallback(() => {
     if (!file?.base64) {
@@ -147,17 +148,19 @@ function App() {
   const onSelectTab = useCallback(
     (id: string) => {
       clearDefinition();
+      clearAnnotation();
       selectTab(id);
     },
-    [clearDefinition, selectTab],
+    [clearAnnotation, clearDefinition, selectTab],
   );
 
   const onCloseTab = useCallback(
     (id: string) => {
       clearDefinition();
+      clearAnnotation();
       closeTab(id);
     },
-    [clearDefinition, closeTab],
+    [clearAnnotation, clearDefinition, closeTab],
   );
 
   const onSaveFile = useCallback(
@@ -178,31 +181,20 @@ function App() {
 
   const onWordClick = useCallback(
     (word: string) => {
-      clearParaphrase();
+      clearAnnotation();
       void requestDefinition(word);
     },
-    [clearParaphrase, requestDefinition],
+    [clearAnnotation, requestDefinition],
   );
 
   const onPhraseSelect = useCallback(
-    (phrase: string, pageNumber: number) => {
+    (phrase: string, pageNumber: number, context?: string) => {
       clearDefinition();
-      void requestParaphrase(phrase, pageNumber);
+      void requestAnnotation(phrase, pageNumber, undefined, context);
     },
-    [clearDefinition, requestParaphrase],
+    [clearDefinition, requestAnnotation],
   );
 
-  const onPhraseAnnotation = useCallback(
-    (phrase: string, content: string) => receiveParaphrase(phrase, content),
-    [receiveParaphrase],
-  );
-
-  const onPhraseAnnotationError = useCallback(
-    (phrase: string, message: string) => failParaphrase(phrase, message),
-    [failParaphrase],
-  );
-
-  const env = getEnv();
   const onPageReady = useCallback(
     (pageNumber: number) => {
       if (pageNumber === 1) {
@@ -279,12 +271,14 @@ function App() {
       onSaveFile={onSaveFile}
       leftGutter={
         activePhrase ? (
-          <ParaphrasePanel
+          <AnnotationPanel
             phrase={activePhrase}
-            status={paraphraseStatus}
-            annotation={paraphraseAnnotation}
-            error={paraphraseError}
-            onClose={clearParaphrase}
+            mode={annotationMode}
+            status={annotationStatus}
+            annotation={annotation}
+            error={annotationError}
+            onModeChange={setAnnotationMode}
+            onClose={clearAnnotation}
           />
         ) : (
           <DefinitionPanel
@@ -316,10 +310,6 @@ function App() {
           selectedFieldId={selectedFieldId}
           onWordClick={onWordClick}
           onPhraseSelect={onPhraseSelect}
-          onPhraseAnnotation={onPhraseAnnotation}
-          onPhraseAnnotationError={onPhraseAnnotationError}
-          gptEndpointUrl={env.gptEndpointUrl}
-          supabaseAnonKey={env.supabaseAnonKey}
           onPageReady={onPageReady}
           onFormFieldClick={selectFormField}
           onFormFieldChange={setFieldValue}

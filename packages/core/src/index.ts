@@ -1,4 +1,4 @@
-export {getEnv, setEnv, isEnvConfigured, isSupabaseEnvConfigured} from './env';
+export {getEnv, setEnv, isEnvConfigured, isSupabaseEnvConfigured, resolveAnnotateEndpointUrl} from './env';
 export type {EnvConfig} from './env';
 export {
   pickPdfFile,
@@ -19,10 +19,21 @@ export {fetchWordDefinition} from './dictionary';
 export type {WordDefinition, WordMeaning} from './dictionary';
 export {useDefinitionStore} from './definitionStore';
 export type {DefinitionStatus} from './definitionStore';
-export {fetchPhraseAnnotation} from './paraphrase';
-export type {PhraseAnnotation} from './paraphrase';
-export {useParaphraseStore} from './paraphraseStore';
-export type {ParaphraseStatus} from './paraphraseStore';
+export {
+  fetchPhraseAnnotation,
+  inferAnnotationMode,
+} from './annotation';
+export type {
+  AnnotationMode,
+  FetchAnnotationOptions,
+  PhraseAnnotation,
+} from './annotation';
+export {useAnnotationStore} from './annotationStore';
+export type {AnnotationStatus} from './annotationStore';
+/** @deprecated Use useAnnotationStore */
+export {useAnnotationStore as useParaphraseStore} from './annotationStore';
+/** @deprecated Use AnnotationStatus */
+export type {AnnotationStatus as ParaphraseStatus} from './annotationStore';
 export {
   useFormAnalysisStore,
   mergeFields,

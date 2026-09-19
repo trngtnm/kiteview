@@ -20,11 +20,42 @@ export function setEnv(raw: RawEnv): void {
   injectedEnv = {...raw};
 }
 
+/**
+ * Resolve the annotate Edge Function URL.
+ * Metro/babel often keeps a stale GPT_ENDPOINT_URL (e.g. forms-detect) after
+ * .env edits — prefer SUPABASE_URL and rewrite any …/functions/v1/<name> to annotate.
+ */
+export function resolveAnnotateEndpointUrl(
+  gptEndpointUrl?: string,
+  supabaseUrl?: string,
+): string {
+  const endpoint = (gptEndpointUrl ?? injectedEnv.GPT_ENDPOINT_URL ?? '')
+    .trim()
+    .replace(/\/+$/, '');
+  const base = (supabaseUrl ?? injectedEnv.SUPABASE_URL ?? '')
+    .trim()
+    .replace(/\/+$/, '');
+
+  if (/\/functions\/v1\/annotate$/i.test(endpoint)) {
+    return endpoint;
+  }
+  if (/\/functions\/v1\/[^/]+$/i.test(endpoint)) {
+    return endpoint.replace(/\/functions\/v1\/[^/]+$/i, '/functions/v1/annotate');
+  }
+  if (base) {
+    return `${base}/functions/v1/annotate`;
+  }
+  return endpoint;
+}
+
 export function getEnv(): EnvConfig {
+  const supabaseUrl = injectedEnv.SUPABASE_URL ?? '';
+  const supabaseAnonKey = injectedEnv.SUPABASE_ANON_KEY ?? '';
+  const rawGpt = injectedEnv.GPT_ENDPOINT_URL ?? '';
   return {
-    supabaseUrl: injectedEnv.SUPABASE_URL ?? '',
-    supabaseAnonKey: injectedEnv.SUPABASE_ANON_KEY ?? '',
-    gptEndpointUrl: injectedEnv.GPT_ENDPOINT_URL ?? '',
+    supabaseUrl,
+    supabaseAnonKey,
+    gptEndpointUrl: resolveAnnotateEndpointUrl(rawGpt, supabaseUrl),
   };
 }
 

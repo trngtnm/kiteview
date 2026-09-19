@@ -9,3 +9,6 @@ enabled = true
 
 [functions.forms-detect]
 verify_jwt = true
+
+[functions.annotate]
+verify_jwt = true

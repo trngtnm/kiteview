@@ -26,7 +26,7 @@ type WebViewMessage = {
   word?: string;
   pageNumber?: number;
   phrase?: string;
-  content?: string;
+  context?: string;
   id?: string;
   value?: string;
   fields?: DetectedFormField[];
@@ -68,10 +68,6 @@ export function PdfViewer({
   onError,
   onWordClick,
   onPhraseSelect,
-  onPhraseAnnotation,
-  onPhraseAnnotationError,
-  gptEndpointUrl,
-  supabaseAnonKey,
   formFields,
   selectedFieldId,
   onFormFieldClick,
@@ -92,11 +88,8 @@ export function PdfViewer({
   }, [base64, sourceUri]);
 
   const html = useMemo(
-    () =>
-      dataUri
-        ? buildPdfViewerHtml(dataUri, gptEndpointUrl, supabaseAnonKey)
-        : null,
-    [dataUri, gptEndpointUrl, supabaseAnonKey],
+    () => (dataUri ? buildPdfViewerHtml(dataUri) : null),
+    [dataUri],
   );
 
   useImperativeHandle(viewerRef, () => ({
@@ -179,21 +172,11 @@ export function PdfViewer({
               typeof data.phrase === 'string' &&
               typeof data.pageNumber === 'number'
             ) {
-              onPhraseSelect?.(data.phrase, data.pageNumber);
-            }
-            if (
-              data.type === 'phraseAnnotation' &&
-              typeof data.phrase === 'string' &&
-              typeof data.content === 'string'
-            ) {
-              onPhraseAnnotation?.(data.phrase, data.content);
-            }
-            if (
-              data.type === 'phraseAnnotationError' &&
-              typeof data.phrase === 'string' &&
-              typeof data.message === 'string'
-            ) {
-              onPhraseAnnotationError?.(data.phrase, data.message);
+              onPhraseSelect?.(
+                data.phrase,
+                data.pageNumber,
+                typeof data.context === 'string' ? data.context : undefined,
+              );
             }
             if (data.type === 'formFieldClick' && typeof data.id === 'string') {
               onFormFieldClick?.(data.id);
