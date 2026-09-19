@@ -6,6 +6,7 @@ export type PdfViewerProps = {
   base64?: string;
   onPageCount?: (count: number) => void;
   onError?: (message: string) => void;
+  onWordClick?: (word: string, pageNumber: number) => void;
 };
 
 /**

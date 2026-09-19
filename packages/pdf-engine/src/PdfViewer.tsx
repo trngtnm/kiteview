@@ -4,15 +4,25 @@ import {WebView} from 'react-native-webview';
 import {buildPdfViewerHtml} from './pdfViewerHtml';
 import type {PdfViewerProps} from './types';
 
+type WebViewMessage = {
+  type: string;
+  count?: number;
+  message?: string;
+  word?: string;
+  pageNumber?: number;
+};
+
 /**
  * Continuous-scroll PDF viewer powered by pdf.js inside a WKWebView.
  * Prefer `base64` from the macOS file picker; falls back to data/file URIs.
+ * Clicks on text-layer words emit `onWordClick`.
  */
 export function PdfViewer({
   sourceUri,
   base64,
   onPageCount,
   onError,
+  onWordClick,
 }: PdfViewerProps) {
   const dataUri = useMemo(() => {
     if (base64) {
@@ -48,16 +58,19 @@ export function PdfViewer({
         mixedContentMode="always"
         onMessage={event => {
           try {
-            const data = JSON.parse(event.nativeEvent.data) as {
-              type: string;
-              count?: number;
-              message?: string;
-            };
+            const data = JSON.parse(event.nativeEvent.data) as WebViewMessage;
             if (data.type === 'pageCount' && typeof data.count === 'number') {
               onPageCount?.(data.count);
             }
             if (data.type === 'error' && data.message) {
               onError?.(data.message);
+            }
+            if (
+              data.type === 'wordClick' &&
+              typeof data.word === 'string' &&
+              typeof data.pageNumber === 'number'
+            ) {
+              onWordClick?.(data.word, data.pageNumber);
             }
           } catch {
             // ignore malformed messages
