@@ -16,6 +16,7 @@ export function GutterSlot({side, style, children}: GutterSlotProps) {
   return (
     <View
       accessibilityLabel={`${side} annotation gutter`}
+      pointerEvents={children ? 'auto' : 'none'}
       style={[styles.gutter, style]}>
       {children}
     </View>

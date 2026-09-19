@@ -46,6 +46,9 @@ export function PdfViewer({
         source={{html, baseUrl: 'https://localhost/'}}
         style={styles.webview}
         mixedContentMode="always"
+        showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator
+        directionalLockEnabled
         onMessage={event => {
           try {
             const data = JSON.parse(event.nativeEvent.data) as {

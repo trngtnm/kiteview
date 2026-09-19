@@ -26,5 +26,7 @@ export const theme: Theme = {
 
 /** Max width of the centered PDF column (Fora-style gutters on the sides). */
 export const PDF_COLUMN_MAX_WIDTH = 820;
-export const RAIL_WIDTH = 200;
+export const RAIL_WIDTH = 220;
 export const GUTTER_MIN_WIDTH = 120;
+/** Space reserved so overlay gutters do not cover the stage scrollbar. */
+export const STAGE_SCROLLBAR_WIDTH = 16;

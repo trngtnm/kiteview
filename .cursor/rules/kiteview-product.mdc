@@ -1,0 +1,12 @@
+---
+description: KiteView product vision and constraints from the implementation plan
+alwaysApply: true
+---
+
+# KiteView product
+
+Source of truth: `pdf-reader-implementation-plan.md`. All work should move toward that product, not a generic PDF viewer.
+
+KiteView is a native React Native reader (macOS first via react-native-macos; later iOS, Android, RN Web) that makes PDFs interactive: tap/highlight for dictionary + LLM explanations tailored to a reading profile, side-margin AI annotations, form-field detection, profile autofill, personal signatures, export, and conversion. Backend is Supabase; LLM/OCR/dictionary keys stay in Edge Functions.
+
+Preserve the Fora-style stage: centered page, empty gutters reserved for annotations, shared `packages/core`, `packages/ui`, and `packages/pdf-engine`. Do not add Electron, put secrets in the client, or treat certified e-sign / realtime co-editing as v1 scope.
