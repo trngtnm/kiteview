@@ -7,12 +7,13 @@ import React, {
 } from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {WebView} from 'react-native-webview';
-import type {DetectedFormField} from './formAnalysis';
+import type {DetectedFormField, RectNorm} from './formTypes';
 import {buildPdfViewerHtml} from './pdfViewerHtml';
 import type {
   FormPageImagePayload,
   PdfViewerHandle,
   PdfViewerProps,
+  PinnedAnnotationView,
 } from './types';
 
 type WebViewHost = {
@@ -27,6 +28,7 @@ type WebViewMessage = {
   pageNumber?: number;
   phrase?: string;
   context?: string;
+  rectNorm?: RectNorm;
   id?: string;
   value?: string;
   fields?: DetectedFormField[];
@@ -55,6 +57,17 @@ function inject(
   webRef.current?.injectJavaScript?.(`${script}; true;`);
 }
 
+function isRectNorm(value: unknown): value is RectNorm {
+  if (!value || typeof value !== 'object') return false;
+  const r = value as RectNorm;
+  return (
+    typeof r.x === 'number' &&
+    typeof r.y === 'number' &&
+    typeof r.w === 'number' &&
+    typeof r.h === 'number'
+  );
+}
+
 /**
  * Continuous-scroll PDF viewer powered by pdf.js (CDN) inside a WKWebView.
  * Form overlays are applied after load via injectJavaScript — never rebuild HTML.
@@ -68,6 +81,9 @@ export function PdfViewer({
   onError,
   onWordClick,
   onPhraseSelect,
+  pinnedAnnotations,
+  selectedPinnedId,
+  onPinnedAnnotationClick,
   formFields,
   selectedFieldId,
   onFormFieldClick,
@@ -107,21 +123,35 @@ export function PdfViewer({
     },
   }));
 
-  const pushFormState = useCallback(() => {
-    const payload = JSON.stringify(formFields ?? []);
-    const id =
+  const pushOverlayState = useCallback(() => {
+    const formPayload = JSON.stringify(formFields ?? []);
+    const formId =
       selectedFieldId == null ? 'null' : JSON.stringify(selectedFieldId);
+    const pinsPayload = JSON.stringify(
+      (pinnedAnnotations ?? []).map((p: PinnedAnnotationView) => ({
+        id: p.id,
+        phrase: p.phrase,
+        content: p.content,
+        pageNumber: p.pageNumber,
+        rectNorm: p.rectNorm,
+        side: p.side,
+      })),
+    );
+    const pinId =
+      selectedPinnedId == null ? 'null' : JSON.stringify(selectedPinnedId);
     inject(
       webRef,
-      `window.__kvSetFormFields && window.__kvSetFormFields(${payload});` +
-        `window.__kvSetSelectedField && window.__kvSetSelectedField(${id})`,
+      `window.__kvSetFormFields && window.__kvSetFormFields(${formPayload});` +
+        `window.__kvSetSelectedField && window.__kvSetSelectedField(${formId});` +
+        `window.__kvSetPinnedAnnotations && window.__kvSetPinnedAnnotations(${pinsPayload});` +
+        `window.__kvSetSelectedPinnedId && window.__kvSetSelectedPinnedId(${pinId})`,
     );
-  }, [formFields, selectedFieldId]);
+  }, [formFields, selectedFieldId, pinnedAnnotations, selectedPinnedId]);
 
   useEffect(() => {
     if (!html) return;
-    pushFormState();
-  }, [html, pushFormState]);
+    pushOverlayState();
+  }, [html, pushOverlayState]);
 
   if (!html) {
     return (
@@ -144,7 +174,7 @@ export function PdfViewer({
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator
         directionalLockEnabled
-        onLoadEnd={pushFormState}
+        onLoadEnd={pushOverlayState}
         onMessage={event => {
           try {
             const data = JSON.parse(event.nativeEvent.data) as WebViewMessage;
@@ -176,7 +206,14 @@ export function PdfViewer({
                 data.phrase,
                 data.pageNumber,
                 typeof data.context === 'string' ? data.context : undefined,
+                isRectNorm(data.rectNorm) ? data.rectNorm : undefined,
               );
+            }
+            if (
+              data.type === 'pinnedAnnotationClick' &&
+              typeof data.id === 'string'
+            ) {
+              onPinnedAnnotationClick?.(data.id);
             }
             if (data.type === 'formFieldClick' && typeof data.id === 'string') {
               onFormFieldClick?.(data.id);

@@ -19,7 +19,11 @@ type AnnotationPanelProps = {
   status: AnnotationStatus;
   annotation: PhraseAnnotation | null;
   error: string | null;
+  pinned?: boolean;
+  canPin?: boolean;
   onModeChange: (mode: AnnotationMode) => void;
+  onPin?: () => void;
+  onUnpin?: () => void;
   onClose: () => void;
 };
 
@@ -29,7 +33,11 @@ export function AnnotationPanel({
   status,
   annotation,
   error,
+  pinned = false,
+  canPin = false,
   onModeChange,
+  onPin,
+  onUnpin,
   onClose,
 }: AnnotationPanelProps) {
   if (!phrase || status === 'idle') return null;
@@ -44,13 +52,35 @@ export function AnnotationPanel({
           <Text style={styles.title} numberOfLines={3}>
             {phrase}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close annotation"
-            onPress={onClose}
-            style={styles.close}>
-            <Text style={styles.closeLabel}>✕</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            {status === 'ready' && pinned && onUnpin ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Unpin annotation"
+                onPress={onUnpin}
+                style={styles.pinBtn}>
+                <Text style={styles.pinBtnLabel}>Unpin</Text>
+              </Pressable>
+            ) : null}
+            {status === 'ready' && !pinned && canPin && onPin ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Pin annotation"
+                onPress={onPin}
+                style={[styles.pinBtn, styles.pinBtnPrimary]}>
+                <Text style={[styles.pinBtnLabel, styles.pinBtnLabelPrimary]}>
+                  Pin
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close annotation"
+              onPress={onClose}
+              style={styles.close}>
+              <Text style={styles.closeLabel}>✕</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.modeRow}>
@@ -111,7 +141,7 @@ const styles = StyleSheet.create({
   wrapper: {
     alignSelf: 'stretch',
     width: '100%',
-    paddingTop: 20,
+    paddingTop: 12,
     paddingHorizontal: 10,
   },
   card: {
@@ -131,11 +161,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   title: {
     flex: 1,
     color: theme.textPrimary,
     fontSize: 17,
     fontWeight: '700',
+  },
+  pinBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F0F0F2',
+  },
+  pinBtnPrimary: {
+    backgroundColor: theme.accent,
+  },
+  pinBtnLabel: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pinBtnLabelPrimary: {
+    color: '#FFFFFF',
   },
   close: {
     width: 28,

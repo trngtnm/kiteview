@@ -12,39 +12,20 @@ import {
   type PDFPage,
   type PDFWidgetAnnotation,
 } from 'pdf-lib';
+import type {
+  DetectedFormField,
+  FormAnalysisResult,
+  FormFieldType,
+  RectNorm,
+} from './formTypes';
 
-export type FormFieldType =
-  | 'text'
-  | 'checkbox'
-  | 'radio'
-  | 'dropdown'
-  | 'signature'
-  | 'unknown';
-
-export type RectNorm = {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-};
-
-export type FormFieldSource = 'acroform' | 'heuristic' | 'vision';
-
-export type DetectedFormField = {
-  id: string;
-  name: string;
-  type: FormFieldType;
-  pageNumber: number;
-  rectNorm: RectNorm;
-  isReadOnly?: boolean;
-  source?: FormFieldSource;
-};
-
-export type FormAnalysisResult = {
-  status: 'none' | 'ready' | 'error';
-  fields: DetectedFormField[];
-  error?: string;
-};
+export type {
+  DetectedFormField,
+  FormAnalysisResult,
+  FormFieldSource,
+  FormFieldType,
+  RectNorm,
+} from './formTypes';
 
 function mapFieldType(field: PDFField): FormFieldType {
   if (field instanceof PDFTextField) return 'text';
@@ -57,10 +38,38 @@ function mapFieldType(field: PDFField): FormFieldType {
   return 'unknown';
 }
 
+type PageIndex = {
+  pages: PDFPage[];
+  /** Widget dict → page index, built once for O(1) fallback lookup. */
+  annotToPage: Map<object, number>;
+};
+
+function buildPageIndex(pages: PDFPage[]): PageIndex {
+  const annotToPage = new Map<object, number>();
+  for (let i = 0; i < pages.length; i++) {
+    try {
+      const annots = pages[i].node.lookupMaybe(PDFName.of('Annots'), PDFArray);
+      if (!annots) {
+        continue;
+      }
+      for (let a = 0; a < annots.size(); a++) {
+        const annot = annots.lookup(a);
+        if (annot) {
+          annotToPage.set(annot as object, i);
+        }
+      }
+    } catch {
+      // skip page
+    }
+  }
+  return {pages, annotToPage};
+}
+
 function findPageForWidget(
-  pages: PDFPage[],
+  index: PageIndex,
   widget: PDFWidgetAnnotation,
 ): {page: PDFPage; index: number} | null {
+  const {pages, annotToPage} = index;
   try {
     const pageRef = widget.P();
     if (pageRef) {
@@ -71,25 +80,14 @@ function findPageForWidget(
       }
     }
   } catch {
-    // fall through to Annots scan
+    // fall through to Annots index
   }
 
-  const widgetRef = widget.dict;
-  for (let i = 0; i < pages.length; i++) {
-    try {
-      const annots = pages[i].node.lookupMaybe(PDFName.of('Annots'), PDFArray);
-      if (!annots) {
-        continue;
-      }
-      for (let a = 0; a < annots.size(); a++) {
-        const annot = annots.lookup(a);
-        if (annot === widgetRef || annot === widget.dict) {
-          return {page: pages[i], index: i};
-        }
-      }
-    } catch {
-      // skip page
-    }
+  const fromMap =
+    annotToPage.get(widget.dict as object) ??
+    annotToPage.get(widget as unknown as object);
+  if (fromMap != null) {
+    return {page: pages[fromMap], index: fromMap};
   }
 
   return null;
@@ -146,9 +144,11 @@ export async function analyzePdfForms(
     }
 
     const bytes = base64ToUint8Array(base64);
+    // Default parseSpeed yields to the event loop and feels multi-second on RN.
     const pdfDoc = await PDFDocument.load(bytes, {
       ignoreEncryption: true,
       updateMetadata: false,
+      parseSpeed: Infinity,
     });
 
     let form;
@@ -163,7 +163,7 @@ export async function analyzePdfForms(
       return {status: 'none', fields: []};
     }
 
-    const pages = pdfDoc.getPages();
+    const pageIndex = buildPageIndex(pdfDoc.getPages());
     const detected: DetectedFormField[] = [];
     let widgetIndex = 0;
 
@@ -191,7 +191,7 @@ export async function analyzePdfForms(
           continue;
         }
 
-        const pageInfo = findPageForWidget(pages, widget);
+        const pageInfo = findPageForWidget(pageIndex, widget);
         if (!pageInfo) {
           continue;
         }

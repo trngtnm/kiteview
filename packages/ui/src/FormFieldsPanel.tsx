@@ -47,7 +47,7 @@ export function FormFieldsPanel({
         {status === 'loading' ? (
           <View style={styles.centered}>
             <ActivityIndicator color={theme.accent} />
-            <Text style={styles.meta}>Detecting form fields…</Text>
+            <Text style={styles.meta}>Scanning for form fields…</Text>
           </View>
         ) : null}
 
@@ -56,7 +56,7 @@ export function FormFieldsPanel({
         ) : null}
 
         {status === 'none' ? (
-          <Text style={styles.meta}>No fillable form fields</Text>
+          <Text style={styles.meta}>No fillable form fields found</Text>
         ) : null}
 
         {status === 'ready' || fields.length > 0 ? (

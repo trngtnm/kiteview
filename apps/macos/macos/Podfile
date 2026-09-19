@@ -24,5 +24,14 @@ target 'KiteView-macOS' do
 
   post_install do |installer|
     react_native_post_install(installer)
+
+    # Hermes aggregate target scripts require REACT_NATIVE_PATH; it is not always
+    # inherited from the app target after `pod install` (e.g. adding AsyncStorage).
+    rn_path = File.expand_path("#{Pod::Config.instance.installation_root}/../node_modules/react-native-macos")
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['REACT_NATIVE_PATH'] = rn_path
+      end
+    end
   end
 end

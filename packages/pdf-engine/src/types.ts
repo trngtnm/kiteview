@@ -1,10 +1,19 @@
 import type {ComponentType, Ref} from 'react';
-import type {DetectedFormField} from './formAnalysis';
+import type {DetectedFormField, RectNorm} from './formTypes';
 
 export type FormPageImagePayload = {
   pageNumber: number;
   imageBase64: string;
   mimeType: 'image/jpeg';
+};
+
+export type PinnedAnnotationView = {
+  id: string;
+  phrase: string;
+  content: string;
+  pageNumber: number;
+  rectNorm: RectNorm;
+  side: 'left' | 'right';
 };
 
 export type PdfViewerHandle = {
@@ -26,7 +35,11 @@ export type PdfViewerProps = {
     phrase: string,
     pageNumber: number,
     context?: string,
+    rectNorm?: RectNorm,
   ) => void;
+  pinnedAnnotations?: PinnedAnnotationView[];
+  selectedPinnedId?: string | null;
+  onPinnedAnnotationClick?: (id: string) => void;
   formFields?: DetectedFormField[];
   selectedFieldId?: string | null;
   onFormFieldClick?: (id: string) => void;

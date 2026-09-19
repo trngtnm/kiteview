@@ -35,8 +35,18 @@ export {useAnnotationStore as useParaphraseStore} from './annotationStore';
 /** @deprecated Use AnnotationStatus */
 export type {AnnotationStatus as ParaphraseStatus} from './annotationStore';
 export {
+  usePinnedAnnotationStore,
+  chooseMarginSide,
+} from './pinnedAnnotationStore';
+export type {
+  PinnedAnnotation,
+  PinAnnotationInput,
+  RectNorm,
+} from './pinnedAnnotationStore';
+export {
   useFormAnalysisStore,
   mergeFields,
+  preloadFormAnalysis,
   VISION_SPARSE_THRESHOLD,
 } from './formAnalysisStore';
 export type {
