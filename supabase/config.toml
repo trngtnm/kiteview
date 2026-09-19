@@ -1,0 +1,11 @@
+# KiteView local Supabase CLI config (functions only for now).
+# Link to your project: `supabase link --project-ref <ref>`
+
+[project]
+id = "kiteview"
+
+[api]
+enabled = true
+
+[functions.forms-detect]
+verify_jwt = true

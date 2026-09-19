@@ -9,6 +9,9 @@
     "lint": "echo 'no-op'",
     "build": "echo 'no-op'"
   },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  },
   "peerDependencies": {
     "react": "*",
     "react-native": "*",

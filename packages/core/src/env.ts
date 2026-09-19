@@ -32,3 +32,9 @@ export function isEnvConfigured(): boolean {
   const env = getEnv();
   return Boolean(env.supabaseUrl && env.supabaseAnonKey && env.gptEndpointUrl);
 }
+
+/** Supabase URL + anon key only (enough for Edge function invokes). */
+export function isSupabaseEnvConfigured(): boolean {
+  const env = getEnv();
+  return Boolean(env.supabaseUrl && env.supabaseAnonKey);
+}

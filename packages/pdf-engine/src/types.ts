@@ -1,10 +1,23 @@
 import type {ComponentType} from 'react';
+import type {DetectedFormField} from './formAnalysis';
+
+export type FormPageImagePayload = {
+  pageNumber: number;
+  imageBase64: string;
+  mimeType: 'image/jpeg';
+};
+
+export type PdfViewerHandle = {
+  runHeuristicDetect: () => void;
+  capturePagesForDetect: (maxPages?: number) => void;
+};
 
 export type PdfViewerProps = {
   sourceUri: string;
   /** When provided, preferred over reading sourceUri from disk. */
   base64?: string;
   onPageCount?: (count: number) => void;
+  onPageReady?: (pageNumber: number) => void;
   onError?: (message: string) => void;
   onWordClick?: (word: string, pageNumber: number) => void;
   onPhraseSelect?: (phrase: string, pageNumber: number) => void;
@@ -12,6 +25,12 @@ export type PdfViewerProps = {
   onPhraseAnnotationError?: (phrase: string, message: string) => void;
   gptEndpointUrl?: string;
   supabaseAnonKey?: string;
+  formFields?: DetectedFormField[];
+  selectedFieldId?: string | null;
+  onFormFieldClick?: (id: string) => void;
+  onFormFieldChange?: (id: string, value: string) => void;
+  onHeuristicFields?: (fields: DetectedFormField[]) => void;
+  onFormPageImages?: (pages: FormPageImagePayload[]) => void;
 };
 
 /**

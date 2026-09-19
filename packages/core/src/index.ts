@@ -1,4 +1,4 @@
-export {getEnv, setEnv, isEnvConfigured} from './env';
+export {getEnv, setEnv, isEnvConfigured, isSupabaseEnvConfigured} from './env';
 export type {EnvConfig} from './env';
 export {
   pickPdfFile,
@@ -23,3 +23,23 @@ export {fetchPhraseAnnotation} from './paraphrase';
 export type {PhraseAnnotation} from './paraphrase';
 export {useParaphraseStore} from './paraphraseStore';
 export type {ParaphraseStatus} from './paraphraseStore';
+export {
+  useFormAnalysisStore,
+  mergeFields,
+  VISION_SPARSE_THRESHOLD,
+} from './formAnalysisStore';
+export type {
+  FormAnalysisStatus,
+  FormDetectionSource,
+  FormCascadeStage,
+} from './formAnalysisStore';
+export {
+  getSupabase,
+  invokeFormsDetect,
+  isSupabaseConfigured,
+} from './supabaseClient';
+export type {
+  FormPageImage,
+  FormsDetectRequest,
+  FormsDetectResponse,
+} from './supabaseClient';

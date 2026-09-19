@@ -34,8 +34,15 @@ type ReaderShellProps = {
   onClearFile?: () => void;
   onRenameFile: (name: string) => void;
   onSaveFile: (name: string) => void;
+  /** Opt-in form detection — never runs on open. */
+  onDetectForms?: () => void;
+  formsDetectLabel?: string;
+  formsDetectDisabled?: boolean;
+  formFieldCount?: number;
   /** Content for the left gutter (e.g. definition panel). */
   leftGutter?: React.ReactNode;
+  /** Content for the right gutter (e.g. form fields panel). */
+  rightGutter?: React.ReactNode;
   children?: React.ReactNode;
 };
 
@@ -57,7 +64,12 @@ export function ReaderShell({
   onClearFile,
   onRenameFile,
   onSaveFile,
+  onDetectForms,
+  formsDetectLabel,
+  formsDetectDisabled,
+  formFieldCount,
   leftGutter,
+  rightGutter,
   children,
 }: ReaderShellProps) {
   const hasDocument = Boolean(children);
@@ -134,7 +146,7 @@ export function ReaderShell({
               <View style={styles.gutterOverlay} pointerEvents="box-none">
                 <GutterSlot side="left">{leftGutter}</GutterSlot>
                 <View style={styles.pdfColumnSpacer} />
-                <GutterSlot side="right" />
+                <GutterSlot side="right">{rightGutter}</GutterSlot>
               </View>
             </View>
           ) : (
@@ -198,6 +210,10 @@ export function ReaderShell({
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
           onClearFile={onClearFile}
+          onDetectForms={onDetectForms}
+          formsDetectLabel={formsDetectLabel}
+          formsDetectDisabled={formsDetectDisabled}
+          formFieldCount={formFieldCount}
         />
         <Pressable
           accessibilityLabel={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
