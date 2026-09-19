@@ -9,6 +9,8 @@ type ReaderShellProps = {
   fileName?: string | null;
   onSelectFile: () => void;
   onClearFile?: () => void;
+  /** Content for the left gutter (e.g. definition panel). */
+  leftGutter?: React.ReactNode;
   children?: React.ReactNode;
 };
 
@@ -16,11 +18,14 @@ type ReaderShellProps = {
  * Fora-inspired reader chrome:
  * collapsible left rail + main stage with centered column and empty side gutters
  * (reserved for future AI annotations / comments / descriptions).
+ * fixed left rail + main stage with centered column and empty side gutters
+ * (left gutter hosts definition / future AI annotations).
  */
 export function ReaderShell({
   fileName,
   onSelectFile,
   onClearFile,
+  leftGutter,
   children,
 }: ReaderShellProps) {
   const hasDocument = Boolean(children);

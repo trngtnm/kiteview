@@ -11,3 +11,4 @@ export {GutterSlot} from './GutterSlot';
 export {SidebarRail} from './SidebarRail';
 export {EmptyState} from './EmptyState';
 export {ReaderShell} from './ReaderShell';
+export {DefinitionPanel} from './DefinitionPanel';
