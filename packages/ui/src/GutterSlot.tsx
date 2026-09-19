@@ -9,14 +9,19 @@ type GutterSlotProps = {
 };
 
 /**
- * Reserved side margin for future AI annotations / comments / descriptions.
- * Currently empty — keep width so the PDF column stays centered Fora-style.
+ * Side margin next to the PDF column.
+ * Left gutter hosts the definition panel and clips overflow so it cannot cover the PDF.
  */
 export function GutterSlot({side, style, children}: GutterSlotProps) {
+  const isLeft = side === 'left';
   return (
     <View
       accessibilityLabel={`${side} annotation gutter`}
-      style={[styles.gutter, style]}>
+      style={[
+        styles.gutter,
+        isLeft && styles.leftGutter,
+        style,
+      ]}>
       {children}
     </View>
   );
@@ -27,5 +32,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 120,
     backgroundColor: theme.gutterBg,
+  },
+  leftGutter: {
+    alignItems: 'stretch',
+    overflow: 'hidden',
   },
 });
