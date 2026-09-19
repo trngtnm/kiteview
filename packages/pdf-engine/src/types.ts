@@ -1,4 +1,4 @@
-import type {ComponentType} from 'react';
+import type {ComponentType, Ref} from 'react';
 import type {DetectedFormField} from './formAnalysis';
 
 export type FormPageImagePayload = {
@@ -13,6 +13,8 @@ export type PdfViewerHandle = {
 };
 
 export type PdfViewerProps = {
+  /** Imperative form-detect helpers (avoid JSX `ref` — RN/TS strips it). */
+  viewerRef?: Ref<PdfViewerHandle | null>;
   sourceUri: string;
   /** When provided, preferred over reading sourceUri from disk. */
   base64?: string;
