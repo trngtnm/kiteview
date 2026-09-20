@@ -12,7 +12,12 @@ import type {
   AnnotationStatus,
   PhraseAnnotation,
 } from '@kiteview/core';
-import {FrostedPanel, frostedPanelChrome as chrome} from './FrostedPanel';
+import {
+  FrostedPanel,
+  frostedPanelChromeFor,
+  type FrostedPanelChrome,
+} from './FrostedPanel';
+import {useColorScheme} from './ThemeProvider';
 
 type AnnotationPanelProps = {
   phrase: string | null;
@@ -47,7 +52,9 @@ export function AnnotationPanel({
   onUnpin,
   onClose,
 }: AnnotationPanelProps) {
-  const styles = useMemo(() => createStyles(), []);
+  const scheme = useColorScheme();
+  const chrome = useMemo(() => frostedPanelChromeFor(scheme), [scheme]);
+  const styles = useMemo(() => createStyles(chrome), [chrome]);
   const [draft, setDraft] = useState(userComment);
   const draftRef = useRef(userComment);
 
@@ -78,7 +85,10 @@ export function AnnotationPanel({
 
   return (
     <View style={styles.wrapper}>
-      <FrostedPanel accessibilityLabel={title} style={styles.card}>
+      <FrostedPanel
+        accessibilityLabel={title}
+        scheme={scheme}
+        style={styles.card}>
         <View style={styles.header}>
           <View style={styles.titleBlock}>
             <Text style={styles.title} numberOfLines={2}>
@@ -204,7 +214,7 @@ function ModeChip({
   );
 }
 
-function createStyles() {
+function createStyles(chrome: FrostedPanelChrome) {
   return StyleSheet.create({
     wrapper: {
       alignSelf: 'stretch',
@@ -219,10 +229,6 @@ function createStyles() {
       borderRadius: 12,
       borderWidth: 2,
       borderColor: chrome.border,
-      shadowColor: chrome.shadow,
-      shadowOpacity: 0.32,
-      shadowRadius: 16,
-      shadowOffset: {width: 0, height: 4},
     },
     header: {
       flexDirection: 'row',

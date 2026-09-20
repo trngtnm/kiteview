@@ -8,7 +8,12 @@ import {
   View,
 } from 'react-native';
 import type {DefinitionStatus, WordDefinition} from '@kiteview/core';
-import {FrostedPanel, frostedPanelChrome as chrome} from './FrostedPanel';
+import {
+  FrostedPanel,
+  frostedPanelChromeFor,
+  type FrostedPanelChrome,
+} from './FrostedPanel';
+import {useColorScheme} from './ThemeProvider';
 
 type DefinitionPanelProps = {
   word: string | null;
@@ -27,7 +32,9 @@ export function DefinitionPanel({
   error,
   onClose,
 }: DefinitionPanelProps) {
-  const styles = useMemo(() => createStyles(), []);
+  const scheme = useColorScheme();
+  const chrome = useMemo(() => frostedPanelChromeFor(scheme), [scheme]);
+  const styles = useMemo(() => createStyles(chrome), [chrome]);
 
   if (!word || status === 'idle') {
     return null;
@@ -43,6 +50,7 @@ export function DefinitionPanel({
     <View style={styles.wrapper}>
       <FrostedPanel
         accessibilityLabel={`Definition of ${title}`}
+        scheme={scheme}
         style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={2}>
@@ -110,7 +118,7 @@ export function DefinitionPanel({
   );
 }
 
-function createStyles() {
+function createStyles(chrome: FrostedPanelChrome) {
   return StyleSheet.create({
     wrapper: {
       alignSelf: 'stretch',
@@ -127,10 +135,6 @@ function createStyles() {
       borderRadius: 12,
       borderWidth: 1,
       borderColor: chrome.inputBorder,
-      shadowColor: chrome.shadow,
-      shadowOpacity: 0.28,
-      shadowRadius: 16,
-      shadowOffset: {width: 0, height: 4},
       maxHeight: 420,
     },
     header: {
