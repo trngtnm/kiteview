@@ -42,14 +42,15 @@ import {registerMacosPdfPicker} from './src/registerMacosPdfPicker';
 bootstrapEnv();
 registerMacosPdfPicker();
 
-/** Flip to true to restore Scan for form fields / overlays / FormFieldsPanel. */
-const FORMS_ENABLED = false;
+/** Manual Find form fields / overlays / FormFieldsPanel. */
+const FORMS_ENABLED = true;
 
 type AccountPanel = 'none' | 'auth' | 'profile' | 'preferences';
 
 function App() {
   const pdfRef = useRef<PdfViewerHandle>(null);
   const page1ReadyRef = useRef(false);
+  const acroformStartedRef = useRef(false);
   const heuristicStartedRef = useRef(false);
   const visionStartedRef = useRef(false);
   const [accountPanel, setAccountPanel] = useState<AccountPanel>('none');
@@ -102,7 +103,10 @@ function App() {
   const selectedFieldId = useFormAnalysisStore(s => s.selectedFieldId);
   const formError = useFormAnalysisStore(s => s.error);
   const cascadeStage = useFormAnalysisStore(s => s.cascadeStage);
+  const webviewAcroPending = useFormAnalysisStore(s => s.webviewAcroPending);
+  const fallbacksSuppressed = useFormAnalysisStore(s => s.fallbacksSuppressed);
   const startDetect = useFormAnalysisStore(s => s.startDetect);
+  const applyAcroformFields = useFormAnalysisStore(s => s.applyAcroformFields);
   const applyHeuristicFields = useFormAnalysisStore(s => s.applyHeuristicFields);
   const applyVisionFromPages = useFormAnalysisStore(s => s.applyVisionFromPages);
   const selectFormField = useFormAnalysisStore(s => s.selectField);
@@ -173,22 +177,36 @@ function App() {
       cascadeStage === 'heuristic' ||
       cascadeStage === 'vision');
 
+  const tryAcroform = useCallback(() => {
+    if (!FORMS_ENABLED) return;
+    if (cascadeStage !== 'scanning' && cascadeStage !== 'acroform') return;
+    if (!page1ReadyRef.current || acroformStartedRef.current) return;
+    acroformStartedRef.current = true;
+    pdfRef.current?.runAcroformDetect();
+  }, [cascadeStage]);
+
   const tryHeuristic = useCallback(() => {
     if (!FORMS_ENABLED) return;
     if (cascadeStage !== 'scanning' && cascadeStage !== 'heuristic') return;
+    if (webviewAcroPending || fallbacksSuppressed) return;
     if (!page1ReadyRef.current || heuristicStartedRef.current) return;
     heuristicStartedRef.current = true;
     pdfRef.current?.runHeuristicDetect();
-  }, [cascadeStage]);
+  }, [cascadeStage, webviewAcroPending, fallbacksSuppressed]);
 
   const tryVision = useCallback(() => {
     if (!FORMS_ENABLED) return;
     if (cascadeStage !== 'scanning' && cascadeStage !== 'vision') return;
+    if (webviewAcroPending || fallbacksSuppressed) return;
     if (!useFormAnalysisStore.getState().visionPending) return;
     if (!page1ReadyRef.current || visionStartedRef.current) return;
     visionStartedRef.current = true;
     pdfRef.current?.capturePagesForDetect(1);
-  }, [cascadeStage]);
+  }, [cascadeStage, webviewAcroPending, fallbacksSuppressed]);
+
+  useEffect(() => {
+    tryAcroform();
+  }, [tryAcroform]);
 
   useEffect(() => {
     tryHeuristic();
@@ -209,6 +227,7 @@ function App() {
       const picked = await pickPdfFile();
       if (picked) {
         page1ReadyRef.current = false;
+        acroformStartedRef.current = false;
         heuristicStartedRef.current = false;
         visionStartedRef.current = false;
         resetPanels();
@@ -223,6 +242,7 @@ function App() {
 
   const onClearFile = useCallback(() => {
     page1ReadyRef.current = false;
+    acroformStartedRef.current = false;
     heuristicStartedRef.current = false;
     visionStartedRef.current = false;
     resetPanels();
@@ -240,14 +260,20 @@ function App() {
     if (!FORMS_ENABLED) return;
     if (!file?.base64) {
       Alert.alert(
-        'Cannot scan forms',
+        'Cannot find form fields',
         'Re-open the PDF so form data can be analyzed.',
       );
       return;
     }
+    acroformStartedRef.current = false;
     heuristicStartedRef.current = false;
     visionStartedRef.current = false;
     void startDetect(file.base64);
+    // Kick WebView AcroForm immediately if page 1 is already ready.
+    if (page1ReadyRef.current) {
+      acroformStartedRef.current = true;
+      pdfRef.current?.runAcroformDetect();
+    }
   }, [file, startDetect]);
 
   const onSelectTab = useCallback(
@@ -377,11 +403,28 @@ function App() {
     (pageNumber: number) => {
       if (pageNumber === 1) {
         page1ReadyRef.current = true;
+        tryAcroform();
         tryHeuristic();
         tryVision();
       }
     },
-    [tryHeuristic, tryVision],
+    [tryAcroform, tryHeuristic, tryVision],
+  );
+
+  const onAcroformFields = useCallback(
+    (fields: DetectedFormField[]) => {
+      const stage = useFormAnalysisStore.getState().cascadeStage;
+      if (stage !== 'scanning' && stage !== 'acroform') {
+        return;
+      }
+      applyAcroformFields(fields);
+      // If no widgets, allow heuristic/vision kickoff now.
+      if (fields.length === 0) {
+        tryHeuristic();
+        tryVision();
+      }
+    },
+    [applyAcroformFields, tryHeuristic, tryVision],
   );
 
   const onHeuristicFields = useCallback(
@@ -411,8 +454,8 @@ function App() {
   );
 
   const formsDetectLabel = cascadeBusy
-    ? 'Scanning…'
-    : 'Scan for form fields';
+    ? 'Finding…'
+    : 'Find form fields';
 
   const showFormOverlays = FORMS_ENABLED && formFields.length > 0;
   const canPin = Boolean(
@@ -634,6 +677,7 @@ function App() {
           onFormFieldClick={FORMS_ENABLED ? selectFormField : undefined}
           onFormFieldChange={FORMS_ENABLED ? setFieldValue : undefined}
           onHeuristicFields={FORMS_ENABLED ? onHeuristicFields : undefined}
+          onAcroformFields={FORMS_ENABLED ? onAcroformFields : undefined}
           onFormPageImages={FORMS_ENABLED ? onFormPageImages : undefined}
           onError={message => Alert.alert('PDF error', message)}
         />

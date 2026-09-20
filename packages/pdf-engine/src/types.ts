@@ -32,6 +32,7 @@ export type ActiveMarginAnnotation = {
 
 export type PdfViewerHandle = {
   runHeuristicDetect: () => void;
+  runAcroformDetect: () => void;
   capturePagesForDetect: (maxPages?: number) => void;
 };
 
@@ -61,6 +62,7 @@ export type PdfViewerProps = {
   onFormFieldClick?: (id: string) => void;
   onFormFieldChange?: (id: string, value: string) => void;
   onHeuristicFields?: (fields: DetectedFormField[]) => void;
+  onAcroformFields?: (fields: DetectedFormField[]) => void;
   onFormPageImages?: (pages: FormPageImagePayload[]) => void;
 };
 

@@ -92,6 +92,7 @@ export function PdfViewer({
   onFormFieldClick,
   onFormFieldChange,
   onHeuristicFields,
+  onAcroformFields,
   onFormPageImages,
 }: PdfViewerProps) {
   const webRef = useRef<WebViewHost | null>(null);
@@ -116,6 +117,12 @@ export function PdfViewer({
       inject(
         webRef,
         'window.__kvRunHeuristicDetect && window.__kvRunHeuristicDetect()',
+      );
+    },
+    runAcroformDetect: () => {
+      inject(
+        webRef,
+        'window.__kvRunAcroformDetect && window.__kvRunAcroformDetect()',
       );
     },
     capturePagesForDetect: (maxPages = 1) => {
@@ -247,6 +254,9 @@ export function PdfViewer({
             }
             if (data.type === 'heuristicFields' && Array.isArray(data.fields)) {
               onHeuristicFields?.(data.fields);
+            }
+            if (data.type === 'acroformFields' && Array.isArray(data.fields)) {
+              onAcroformFields?.(data.fields);
             }
             if (data.type === 'formPageImages' && Array.isArray(data.pages)) {
               onFormPageImages?.(data.pages);

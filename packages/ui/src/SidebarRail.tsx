@@ -44,7 +44,7 @@ export function SidebarRail({
   onCloseTab,
   onClearFile,
   onDetectForms,
-  formsDetectLabel = 'Scan for form fields',
+  formsDetectLabel = 'Find form fields',
   formsDetectDisabled,
   formFieldCount,
   accountLabel = 'Guest',

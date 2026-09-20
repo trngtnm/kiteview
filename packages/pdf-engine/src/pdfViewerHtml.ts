@@ -189,11 +189,11 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     }
     .formField {
       position: absolute;
-      border: 1.5px dashed rgba(0, 113, 227, 0.85);
-      background: rgba(0, 113, 227, 0.08);
-      border-radius: 2px;
+      border: 1.5px dashed rgba(0, 113, 227, 0.9);
+      background: rgba(0, 113, 227, 0.1);
+      border-radius: 3px;
       pointer-events: auto;
-      cursor: pointer;
+      cursor: text;
       box-sizing: border-box;
       overflow: hidden;
       display: flex;
@@ -203,8 +203,8 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     .formField.selected {
       border-style: solid;
       border-width: 2px;
-      background: rgba(0, 113, 227, 0.18);
-      box-shadow: inset 0 0 0 1px rgba(0, 113, 227, 0.35);
+      background: rgba(0, 113, 227, 0.2);
+      box-shadow: inset 0 0 0 1px rgba(0, 113, 227, 0.4);
     }
     .formField input[type="text"] {
       width: 100%;
@@ -215,18 +215,10 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       font: inherit;
       font-size: inherit;
       line-height: 1.1;
-      padding: 0 2px;
+      padding: 0 4px;
       margin: 0;
       color: #1d1d1f;
       box-sizing: border-box;
-    }
-    .formField input[type="checkbox"] {
-      width: 70%;
-      height: 70%;
-      margin: auto;
-      display: block;
-      flex: none;
-      accent-color: #0071e3;
     }
     #status {
       color: #6E6E73;
@@ -695,12 +687,12 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
               'formField' + (field.id === selectedFieldId ? ' selected' : '');
             el.dataset.fieldId = field.id;
             const r = field.rectNorm || {};
-            const boxH = Math.max(8, (r.h || 0) * pageH);
+            const boxH = Math.max(10, (r.h || 0.02) * pageH);
             el.style.left = (r.x || 0) * pageW + 'px';
             el.style.top = (r.y || 0) * pageH + 'px';
-            el.style.width = Math.max(8, (r.w || 0) * pageW) + 'px';
+            el.style.width = Math.max(12, (r.w || 0) * pageW) + 'px';
             el.style.height = boxH + 'px';
-            const fontPx = Math.max(8, Math.min(18, boxH * 0.7));
+            const fontPx = Math.max(9, Math.min(16, boxH * 0.72));
             el.style.fontSize = fontPx + 'px';
 
             el.addEventListener('mousedown', (e) => {
@@ -710,35 +702,25 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
               post({ type: 'formFieldClick', id: field.id });
             });
 
+            // Text-only magic rectangles: always a writable text input.
             const value = fieldValues[field.id] ?? '';
-            if (field.type === 'checkbox') {
-              const input = document.createElement('input');
-              input.type = 'checkbox';
-              input.checked = value === 'true' || value === '1' || value === 'yes';
-              input.addEventListener('change', (e) => {
-                e.stopPropagation();
-                const next = input.checked ? 'true' : 'false';
-                fieldValues[field.id] = next;
-                post({ type: 'formFieldChange', id: field.id, value: next });
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = value;
+            input.placeholder = '';
+            input.autocomplete = 'off';
+            input.spellcheck = false;
+            input.addEventListener('input', (e) => {
+              e.stopPropagation();
+              fieldValues[field.id] = input.value;
+              post({
+                type: 'formFieldChange',
+                id: field.id,
+                value: input.value,
               });
-              el.appendChild(input);
-            } else if (field.type !== 'signature') {
-              const input = document.createElement('input');
-              input.type = 'text';
-              input.value = value;
-              input.placeholder = '';
-              input.addEventListener('input', (e) => {
-                e.stopPropagation();
-                fieldValues[field.id] = input.value;
-                post({
-                  type: 'formFieldChange',
-                  id: field.id,
-                  value: input.value,
-                });
-              });
-              input.addEventListener('mousedown', (e) => e.stopPropagation());
-              el.appendChild(input);
-            }
+            });
+            input.addEventListener('mousedown', (e) => e.stopPropagation());
+            el.appendChild(input);
 
             overlay.appendChild(el);
           });
@@ -751,11 +733,6 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       });
     }
 
-    function inferFieldType(label) {
-      // Text-only detection for now.
-      return 'text';
-    }
-
     function cleanLabel(raw) {
       return String(raw || '')
         .replace(/[:.\\-_]+$/g, '')
@@ -764,6 +741,74 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         .replace(/\\*+/g, '')
         .trim()
         .slice(0, 80);
+    }
+
+    /** LiveCycle / AcroForm fieldName → readable label. */
+    function humanizeWidgetName(raw) {
+      const full = String(raw || '');
+      const leaf = full.split('.').pop() || full;
+      return leaf
+        .replace(/\\[\\d+\\]/g, '')
+        .replace(/_/g, ' ')
+        .replace(/\\s+/g, ' ')
+        .trim()
+        .slice(0, 100);
+    }
+
+    /**
+     * Real AcroForm text widgets via pdf.js (works on encrypted LiveCycle
+     * PDFs like Form I-9 where pdf-lib fails).
+     */
+    async function detectAcroformTextFields() {
+      const fields = [];
+      if (!pdfDoc) return fields;
+      for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
+        const page = await pdfDoc.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1 });
+        const pageW = viewport.width || 1;
+        const pageH = viewport.height || 1;
+        const annotations = await page.getAnnotations({ intent: 'display' });
+        for (let i = 0; i < annotations.length; i++) {
+          const ann = annotations[i];
+          if (!ann || ann.subtype !== 'Widget') continue;
+          if (ann.fieldType !== 'Tx') continue;
+          const rect = ann.rect;
+          if (!Array.isArray(rect) || rect.length < 4) continue;
+          const x1 = Number(rect[0]);
+          const y1 = Number(rect[1]);
+          const x2 = Number(rect[2]);
+          const y2 = Number(rect[3]);
+          if (![x1, y1, x2, y2].every(Number.isFinite)) continue;
+          const left = Math.min(x1, x2);
+          const right = Math.max(x1, x2);
+          const bottom = Math.min(y1, y2);
+          const top = Math.max(y1, y2);
+          const w = (right - left) / pageW;
+          const h = (top - bottom) / pageH;
+          if (w < 0.008 || h < 0.006) continue;
+          const rawName = String(ann.fieldName || '');
+          const name = humanizeWidgetName(rawName) || 'Text field';
+          const id =
+            (rawName || 'tx_' + pageNumber + '_' + i)
+              .replace(/[^a-zA-Z0-9._\\-]+/g, '_')
+              .slice(0, 160) || 'tx_' + pageNumber + '_' + i;
+          fields.push({
+            id,
+            name,
+            type: 'text',
+            pageNumber,
+            rectNorm: {
+              x: Math.max(0, Math.min(1, left / pageW)),
+              y: Math.max(0, Math.min(1, (pageH - top) / pageH)),
+              w: Math.max(0.008, Math.min(1, w)),
+              // Keep true widget height (incl. multiline) — no line clamp.
+              h: Math.max(0.006, Math.min(1, h)),
+            },
+            source: 'acroform',
+          });
+        }
+      }
+      return fields;
     }
 
     function rectsOverlap(a, b, pad) {
@@ -810,7 +855,8 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         x: Math.max(0, Math.min(1, x)),
         y: Math.max(0, Math.min(1, y)),
         w: Math.max(0.008, Math.min(1 - Math.max(0, x), w)),
-        h: Math.max(0.01, Math.min(0.08, h)),
+        // Line-sized writing area — keep blanks short vertically.
+        h: Math.max(0.012, Math.min(0.035, h)),
       };
     }
 
@@ -831,11 +877,12 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       const total = full.length;
       const startFrac = start / total;
       const blankFrac = Math.max(blank.length / total, 0.08);
+      const lineH = Math.max(0.012, Math.min(0.032, bounds.h));
       return {
         x: bounds.x + bounds.w * startFrac,
-        y: bounds.y,
+        y: bounds.y + Math.max(0, (bounds.h - lineH) * 0.15),
         w: Math.max(0.04, bounds.w * blankFrac),
-        h: Math.max(bounds.h, 0.014),
+        h: lineH,
       };
     }
 
@@ -848,11 +895,12 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
           : Math.max(gapStart + 0.2, 0.88);
       const w = Math.min(0.92, gapEnd) - gapStart;
       if (w < 0.05) return null;
+      const lineH = Math.max(0.012, Math.min(0.032, labelBounds.h));
       return {
         x: gapStart,
-        y: labelBounds.y,
+        y: labelBounds.y + Math.max(0, (labelBounds.h - lineH) * 0.15),
         w,
-        h: Math.max(labelBounds.h, 0.014),
+        h: lineH,
       };
     }
 
@@ -875,18 +923,19 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
 
     function tryPushField(fields, pageNumber, idxRef, label, type, rect) {
       if (!rect || !label) return false;
-      const minW = type === 'checkbox' ? 0.012 : 0.035;
+      const minW = 0.035;
       if (rect.w < minW || rect.h < 0.008) return false;
       const candidate = {
         id: 'heur_' + pageNumber + '_' + idxRef.n,
         name: label,
-        type: type || inferFieldType(label),
+        type: 'text',
         pageNumber,
         rectNorm: {
           x: Math.max(0, Math.min(0.98, rect.x)),
           y: Math.max(0, Math.min(0.98, rect.y)),
           w: Math.max(minW, Math.min(0.95, rect.w)),
-          h: Math.max(0.01, Math.min(0.08, rect.h)),
+          // Cap height to a single writing line.
+          h: Math.max(0.012, Math.min(0.035, rect.h)),
         },
         source: 'heuristic',
       };
@@ -1198,6 +1247,19 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       } catch (err) {
         post({
           type: 'heuristicFields',
+          fields: [],
+          message: String(err && err.message ? err.message : err),
+        });
+      }
+    };
+
+    window.__kvRunAcroformDetect = async function () {
+      try {
+        const fields = await detectAcroformTextFields();
+        post({ type: 'acroformFields', fields });
+      } catch (err) {
+        post({
+          type: 'acroformFields',
           fields: [],
           message: String(err && err.message ? err.message : err),
         });

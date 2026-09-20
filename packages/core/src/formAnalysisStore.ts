@@ -44,15 +44,21 @@ type FormAnalysisState = {
   cascadeStage: FormCascadeStage;
   /** True while background pdf-lib AcroForm has not settled. */
   acroPending: boolean;
+  /** True until WebView pdf.js widget scan has reported once. */
+  webviewAcroPending: boolean;
   /** True while Edge vision has not settled (or was skipped). */
   visionPending: boolean;
   /** True until WebView heuristics have reported once. */
   heuristicPending: boolean;
+  /** When true, heuristics/vision must not merge (real widgets found). */
+  fallbacksSuppressed: boolean;
   /**
    * User-triggered scan. Never call from file-open.
    * Starts heuristics + vision immediately; AcroForm merges in parallel.
    */
   startDetect: (base64: string) => Promise<void>;
+  /** Primary path: pdf.js Widget Tx fields from the open WebView document. */
+  applyAcroformFields: (fields: DetectedFormField[]) => void;
   applyHeuristicFields: (fields: DetectedFormField[]) => void;
   applyVisionFromPages: (pages: FormPageImage[]) => Promise<void>;
   markNone: () => void;
@@ -254,8 +260,10 @@ function publishMerged(
   incoming: DetectedFormField[],
 ) {
   const merged = mergeFields(get().fields, incoming);
-  const {acroPending, visionPending, heuristicPending} = get();
-  const stillBusy = acroPending || visionPending || heuristicPending;
+  const {acroPending, webviewAcroPending, visionPending, heuristicPending} =
+    get();
+  const stillBusy =
+    acroPending || webviewAcroPending || visionPending || heuristicPending;
 
   if (merged.length === 0) {
     if (stillBusy) {
@@ -297,7 +305,12 @@ function finishIfIdle(
   get: () => FormAnalysisState,
 ) {
   const state = get();
-  if (state.acroPending || state.visionPending || state.heuristicPending) {
+  if (
+    state.acroPending ||
+    state.webviewAcroPending ||
+    state.visionPending ||
+    state.heuristicPending
+  ) {
     return;
   }
   if (state.fields.length === 0) {
@@ -324,8 +337,10 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
   detectionSource: null,
   cascadeStage: 'idle',
   acroPending: false,
+  webviewAcroPending: false,
   visionPending: false,
   heuristicPending: false,
+  fallbacksSuppressed: false,
 
   clear: () =>
     set({
@@ -337,8 +352,10 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       detectionSource: null,
       cascadeStage: 'idle',
       acroPending: false,
+      webviewAcroPending: false,
       visionPending: false,
       heuristicPending: false,
+      fallbacksSuppressed: false,
     }),
 
   selectField: id => set({selectedFieldId: id}),
@@ -358,8 +375,10 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       detectionSource: null,
       cascadeStage: 'done',
       acroPending: false,
+      webviewAcroPending: false,
       visionPending: false,
       heuristicPending: false,
+      fallbacksSuppressed: false,
     }),
 
   startDetect: async (base64: string) => {
@@ -374,11 +393,13 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       detectionSource: null,
       cascadeStage: 'scanning',
       acroPending: true,
+      webviewAcroPending: true,
       visionPending: wantVision,
       heuristicPending: true,
+      fallbacksSuppressed: false,
     });
 
-    // AcroForm in parallel — never blocks heuristics/vision kickoff.
+    // pdf-lib AcroForm in parallel (fails on some LiveCycle PDFs; WebView is primary).
     void (async () => {
       try {
         const {analyzePdfForms} = await loadFormAnalysis();
@@ -399,8 +420,18 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
             ? withSource(result.fields, 'acroform')
             : [];
         set({acroPending: false});
+        if (get().fallbacksSuppressed) {
+          finishIfIdle(set, get);
+          return;
+        }
         if (acro.length > 0) {
           publishMerged(set, get, acro);
+          set({
+            fallbacksSuppressed: true,
+            heuristicPending: false,
+            visionPending: false,
+          });
+          finishIfIdle(set, get);
         } else {
           finishIfIdle(set, get);
         }
@@ -414,16 +445,45 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
         finishIfIdle(set, get);
       }
     })();
+  },
 
-    // If no Supabase, local stages alone must finish after AcroForm + heuristics.
-    if (!wantVision) {
-      // Heuristics still applied via App; when acro settles finishIfIdle runs.
+  applyAcroformFields: fields => {
+    const stage = get().cascadeStage;
+    if (stage !== 'scanning' && stage !== 'acroform' && stage !== 'heuristic') {
+      return;
     }
+    const incoming = withSource(fields, 'acroform');
+    if (incoming.length > 0) {
+      // Replace — do not keep heuristic/vision junk alongside real widgets.
+      // WebView widgets are authoritative; stop waiting on pdf-lib / fallbacks.
+      set({
+        webviewAcroPending: false,
+        acroPending: false,
+        fallbacksSuppressed: true,
+        heuristicPending: false,
+        visionPending: false,
+        status: 'ready',
+        fields: incoming,
+        detectionSource: 'acroform',
+        error: null,
+        cascadeStage: 'done',
+        selectedFieldId: null,
+        fieldValues: {},
+      });
+      return;
+    }
+    set({webviewAcroPending: false});
+    finishIfIdle(set, get);
   },
 
   applyHeuristicFields: fields => {
     const stage = get().cascadeStage;
     if (stage !== 'scanning' && stage !== 'vision' && stage !== 'heuristic') {
+      return;
+    }
+    if (get().fallbacksSuppressed || get().webviewAcroPending) {
+      set({heuristicPending: false});
+      finishIfIdle(set, get);
       return;
     }
     const incoming = withSource(fields, 'heuristic');
@@ -433,6 +493,12 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
   },
 
   applyVisionFromPages: async pages => {
+    if (get().fallbacksSuppressed || get().webviewAcroPending) {
+      set({visionPending: false});
+      finishIfIdle(set, get);
+      return;
+    }
+
     const prior = get().fields;
 
     if (!isSupabaseConfigured()) {
@@ -451,6 +517,11 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
     try {
       const visionFields = withSource(await invokeFormsDetect(pages), 'vision');
       if (get().cascadeStage === 'idle') return;
+      if (get().fallbacksSuppressed) {
+        set({visionPending: false});
+        finishIfIdle(set, get);
+        return;
+      }
       set({visionPending: false});
       publishMerged(set, get, visionFields);
       finishIfIdle(set, get);

@@ -107,6 +107,7 @@ Rules:
 - NEVER use pixel coordinates or 0–100 percentages — only 0–1.
 - name MUST be the nearest printed label to that blank (e.g. "Full Name", "Email"). Do not invent names; do not use generic "Field 1".
 - Draw TIGHT boxes on the writable text blank only (underscores / empty text boxes). Prefer undersized to oversized. Do NOT include the label text inside the box.
+- Typical blank height is about 0.015–0.03 of page height (one writing line). Never emit h > 0.04 unless the blank is clearly a multi-line text area.
 - Do NOT box section headers, titles, instructions, table grid lines, checkboxes, or already-filled text.
 - Ignore letterboxing/padding; coords are relative to the page content image dimensions given per page.
 - pageNumber must match the page number given for each image.
@@ -221,6 +222,13 @@ Rules:
       if (w <= 0.005 || h <= 0.005) return;
       if (x + w > 1) w = Math.max(0.005, 1 - x);
       if (y + h > 1) h = Math.max(0.005, 1 - y);
+
+      // Keep write-area boxes line-sized unless clearly a tall multi-line blank.
+      if (h > 0.04) {
+        h = Math.min(h, 0.04);
+      }
+      h = Math.max(0.012, Math.min(0.04, h));
+      w = Math.max(0.03, w);
 
       const typeRaw = String(raw.type || 'text') as FieldType;
       // Text-only: drop non-text types; coerce unknown → text.

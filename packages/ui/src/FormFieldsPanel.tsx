@@ -20,15 +20,6 @@ type FormFieldsPanelProps = {
   onSelectField: (id: string) => void;
 };
 
-const TYPE_LABEL: Record<DetectedFormField['type'], string> = {
-  text: 'Text',
-  checkbox: 'Checkbox',
-  radio: 'Radio',
-  dropdown: 'Dropdown',
-  signature: 'Signature',
-  unknown: 'Field',
-};
-
 export function FormFieldsPanel({
   status,
   fields,
@@ -46,12 +37,12 @@ export function FormFieldsPanel({
   return (
     <View style={styles.wrapper}>
       <View style={styles.card}>
-        <Text style={styles.title}>Form fields</Text>
+        <Text style={styles.title}>Text fields</Text>
 
         {status === 'loading' ? (
           <View style={styles.centered}>
             <ActivityIndicator color={theme.accent} />
-            <Text style={styles.meta}>Scanning for form fields…</Text>
+            <Text style={styles.meta}>Finding text fields…</Text>
           </View>
         ) : null}
 
@@ -60,13 +51,13 @@ export function FormFieldsPanel({
         ) : null}
 
         {status === 'none' ? (
-          <Text style={styles.meta}>No fillable form fields found</Text>
+          <Text style={styles.meta}>No text fields found</Text>
         ) : null}
 
         {status === 'ready' || fields.length > 0 ? (
           <>
             <Text style={styles.count}>
-              {fields.length} field{fields.length === 1 ? '' : 's'} detected
+              {fields.length} text field{fields.length === 1 ? '' : 's'}
               {status === 'loading' ? ' (refining…)' : ''}
             </Text>
             <ScrollView
@@ -90,7 +81,7 @@ export function FormFieldsPanel({
                         {field.name}
                       </Text>
                       <Text style={styles.fieldMeta}>
-                        p.{field.pageNumber} · {TYPE_LABEL[field.type]}
+                        p.{field.pageNumber} · write area
                       </Text>
                     </View>
                   </Pressable>
