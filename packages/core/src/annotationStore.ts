@@ -40,6 +40,8 @@ type AnnotationState = {
   }) => void;
   setUserComment: (comment: string) => void;
   setMode: (mode: AnnotationMode) => void;
+  /** Keep the panel open but clear the saved-pin association (after unpin). */
+  clearViewingPin: () => void;
   clearAnnotation: () => void;
 };
 
@@ -68,6 +70,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       viewingPinnedId: null,
     }),
   setUserComment: comment => set({userComment: comment}),
+  clearViewingPin: () => set({viewingPinnedId: null}),
   showPinnedAnnotation: pin =>
     set({
       activePhrase: pin.phrase,

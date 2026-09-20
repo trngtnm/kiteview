@@ -185,6 +185,21 @@ export function buildPdfViewerHtml(
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
+    .pinnedNote .pinComment {
+      font: 500 11px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #1d1d1f;
+      margin: 8px 0 0;
+      padding-top: 6px;
+      border-top: 1px solid rgba(0, 0, 0, 0.08);
+      display: none;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    html[data-scheme="dark"] .pinnedNote .pinComment {
+      color: #E8EDF5;
+      border-top-color: rgba(255, 255, 255, 0.12);
+    }
     /* Full annotation next to the highlight — scrolls with the page. */
     .pinnedNote.extended .pinPhrase,
     .pinnedNote.selected .pinPhrase,
@@ -195,6 +210,10 @@ export function buildPdfViewerHtml(
       overflow: visible;
       overflow-wrap: anywhere;
       word-break: break-word;
+    }
+    .pinnedNote.extended .pinComment,
+    .pinnedNote.selected .pinComment {
+      display: block;
     }
     .formOverlay {
       position: absolute;
@@ -559,8 +578,18 @@ export function buildPdfViewerHtml(
       bodyEl.textContent = String(opts.body || '');
       note.appendChild(phraseEl);
       note.appendChild(bodyEl);
+      const commentText = String(opts.userComment || '').trim();
+      if (commentText && (extended || opts.selected)) {
+        const commentEl = document.createElement('p');
+        commentEl.className = 'pinComment';
+        commentEl.textContent = commentText;
+        note.appendChild(commentEl);
+      }
       if (opts.onMouseDown) {
         note.addEventListener('mousedown', opts.onMouseDown);
+      }
+      if (opts.onContextMenu) {
+        note.addEventListener('contextmenu', opts.onContextMenu);
       }
       overlay.appendChild(note);
       return note;
@@ -621,6 +650,13 @@ export function buildPdfViewerHtml(
                       activeAnnotation.status === 'loading'
                     ? 'Working…'
                     : pin.content,
+              userComment:
+                selected &&
+                activeAnnotation &&
+                activeAnnotation.pinId === pin.id &&
+                typeof activeAnnotation.userComment === 'string'
+                  ? activeAnnotation.userComment
+                  : pin.userComment || '',
               rectNorm: r,
               side: pin.side,
               selected,
@@ -630,10 +666,24 @@ export function buildPdfViewerHtml(
               onMouseDown: (e) => {
                 e.stopPropagation();
                 e.preventDefault();
+                // Left click → expand little note only.
+                if (e.button !== 0) return;
                 post({
                   type: 'pinnedAnnotationClick',
                   id: pin.id,
                   source: 'note',
+                  action: 'expand',
+                });
+              },
+              onContextMenu: (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                // Right click → expand little note + open large panel.
+                post({
+                  type: 'pinnedAnnotationClick',
+                  id: pin.id,
+                  source: 'note',
+                  action: 'open',
                 });
               },
             });
@@ -661,6 +711,7 @@ export function buildPdfViewerHtml(
           appendMarginNote(overlay, {
             phrase: active.phrase,
             body,
+            userComment: active.userComment || '',
             rectNorm: active.rectNorm,
             side: active.side,
             selected: true,
@@ -1334,6 +1385,9 @@ export function buildPdfViewerHtml(
         for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
           await renderPage(pdfDoc, pageNum, maxWidth);
         }
+        schedulePaintPinnedAnnotations();
+        schedulePaintFormOverlays();
+        post({ type: 'documentReady', count: pdfDoc.numPages });
       } catch (err) {
         statusEl.textContent = 'Failed to load PDF';
         post({
@@ -1532,6 +1586,7 @@ export function buildPdfViewerHtml(
       }
     };
 
+    post({ type: 'webviewReady' });
     render();
   </script>
 </body>

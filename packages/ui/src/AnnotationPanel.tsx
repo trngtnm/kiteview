@@ -12,12 +12,8 @@ import type {
   AnnotationStatus,
   PhraseAnnotation,
 } from '@kiteview/core';
-import {
-  FrostedPanel,
-  frostedPanelChromeFor,
-  type FrostedPanelChrome,
-} from './FrostedPanel';
-import {useColorScheme} from './ThemeProvider';
+import {useTheme} from './ThemeProvider';
+import type {Theme} from './theme';
 
 type AnnotationPanelProps = {
   phrase: string | null;
@@ -52,9 +48,8 @@ export function AnnotationPanel({
   onUnpin,
   onClose,
 }: AnnotationPanelProps) {
-  const scheme = useColorScheme();
-  const chrome = useMemo(() => frostedPanelChromeFor(scheme), [scheme]);
-  const styles = useMemo(() => createStyles(chrome), [chrome]);
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [draft, setDraft] = useState(userComment);
   const draftRef = useRef(userComment);
 
@@ -85,10 +80,7 @@ export function AnnotationPanel({
 
   return (
     <View style={styles.wrapper}>
-      <FrostedPanel
-        accessibilityLabel={title}
-        scheme={scheme}
-        style={styles.card}>
+      <View style={styles.card} accessibilityLabel={title}>
         <View style={styles.header}>
           <View style={styles.titleBlock}>
             <Text style={styles.title} numberOfLines={2}>
@@ -104,8 +96,8 @@ export function AnnotationPanel({
                 accessibilityRole="button"
                 accessibilityLabel="Unpin annotation"
                 onPress={onUnpin}
-                style={styles.pinBtn}>
-                <Text style={styles.pinBtnLabel}>Unpin</Text>
+                style={[styles.pinBtn, styles.pinBtnPrimary]}>
+                <PinIcon color={theme.accentText} filled />
               </Pressable>
             ) : null}
             {status === 'ready' && !pinned && canPin && onPin ? (
@@ -113,10 +105,8 @@ export function AnnotationPanel({
                 accessibilityRole="button"
                 accessibilityLabel="Pin annotation"
                 onPress={onPin}
-                style={[styles.pinBtn, styles.pinBtnPrimary]}>
-                <Text style={[styles.pinBtnLabel, styles.pinBtnLabelPrimary]}>
-                  Pin
-                </Text>
+                style={styles.pinBtn}>
+                <PinIcon color={theme.textSecondary} filled={false} />
               </Pressable>
             ) : null}
             <Pressable
@@ -146,7 +136,7 @@ export function AnnotationPanel({
 
         {status === 'loading' ? (
           <View style={styles.loading}>
-            <ActivityIndicator color={chrome.accent} />
+            <ActivityIndicator color={theme.accent} />
             <Text style={styles.meta}>{loadingLabel}</Text>
           </View>
         ) : null}
@@ -171,7 +161,7 @@ export function AnnotationPanel({
                 commitDraft(event.nativeEvent?.text ?? draftRef.current)
               }
               placeholder="Add your own notes about this selection…"
-              placeholderTextColor={chrome.textSecondary}
+              placeholderTextColor={theme.textSecondary}
               style={styles.commentInput}
               value={draft}
               textAlignVertical="top"
@@ -185,10 +175,55 @@ export function AnnotationPanel({
             )}
           </View>
         ) : null}
-      </FrostedPanel>
+      </View>
     </View>
   );
 }
+
+function PinIcon({color, filled}: {color: string; filled: boolean}) {
+  return (
+    <View style={pinIconStyles.wrap} pointerEvents="none">
+      <View
+        style={[
+          pinIconStyles.head,
+          {borderColor: color, backgroundColor: filled ? color : 'transparent'},
+        ]}
+      />
+      <View
+        style={[
+          pinIconStyles.needle,
+          {
+            borderTopColor: color,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+const pinIconStyles = StyleSheet.create({
+  wrap: {
+    width: 12,
+    height: 15,
+    alignItems: 'center',
+  },
+  head: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.5,
+  },
+  needle: {
+    width: 0,
+    height: 0,
+    marginTop: -1,
+    borderLeftWidth: 3.5,
+    borderRightWidth: 3.5,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+});
 
 function ModeChip({
   label,
@@ -214,7 +249,7 @@ function ModeChip({
   );
 }
 
-function createStyles(chrome: FrostedPanelChrome) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     wrapper: {
       alignSelf: 'stretch',
@@ -227,8 +262,13 @@ function createStyles(chrome: FrostedPanelChrome) {
       maxWidth: 320,
       padding: 14,
       borderRadius: 12,
+      backgroundColor: theme.pageSurface,
       borderWidth: 2,
-      borderColor: chrome.border,
+      borderColor: theme.accentBorder,
+      shadowColor: theme.shadow,
+      shadowOpacity: 0.1,
+      shadowRadius: 12,
+      shadowOffset: {width: 0, height: 2},
     },
     header: {
       flexDirection: 'row',
@@ -247,31 +287,25 @@ function createStyles(chrome: FrostedPanelChrome) {
       minWidth: 0,
     },
     title: {
-      color: chrome.textPrimary,
+      color: theme.textPrimary,
       fontSize: 17,
       fontWeight: '700',
     },
     phrase: {
-      color: chrome.textSecondary,
+      color: theme.textSecondary,
       fontSize: 13,
       lineHeight: 18,
     },
     pinBtn: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      width: 28,
+      height: 28,
       borderRadius: 8,
-      backgroundColor: chrome.chipBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.chipBg,
     },
     pinBtnPrimary: {
-      backgroundColor: chrome.accent,
-    },
-    pinBtnLabel: {
-      color: chrome.textSecondary,
-      fontSize: 12,
-      fontWeight: '700',
-    },
-    pinBtnLabelPrimary: {
-      color: chrome.accentText,
+      backgroundColor: theme.accent,
     },
     close: {
       width: 28,
@@ -279,9 +313,9 @@ function createStyles(chrome: FrostedPanelChrome) {
       borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: chrome.chipBg,
+      backgroundColor: theme.chipBg,
     },
-    closeLabel: {color: chrome.textSecondary, fontSize: 13, fontWeight: '600'},
+    closeLabel: {color: theme.textSecondary, fontSize: 13, fontWeight: '600'},
     modeRow: {
       flexDirection: 'row',
       gap: 8,
@@ -291,36 +325,36 @@ function createStyles(chrome: FrostedPanelChrome) {
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 8,
-      backgroundColor: chrome.chipBg,
+      backgroundColor: theme.chipBg,
     },
     chipActive: {
-      backgroundColor: chrome.chipBgActive,
+      backgroundColor: theme.chipBgActive,
     },
     chipLabel: {
-      color: chrome.chipText,
+      color: theme.chipText,
       fontSize: 13,
       fontWeight: '600',
     },
     chipLabelActive: {
-      color: chrome.chipTextActive,
+      color: theme.chipTextActive,
     },
     loading: {marginTop: 16, alignItems: 'center', gap: 8},
-    meta: {color: chrome.textSecondary, fontSize: 13},
+    meta: {color: theme.textSecondary, fontSize: 13},
     content: {
       marginTop: 14,
-      color: chrome.textPrimary,
+      color: theme.textPrimary,
       fontSize: 14,
       lineHeight: 21,
     },
-    error: {marginTop: 12, color: chrome.danger, fontSize: 14, lineHeight: 20},
+    error: {marginTop: 12, color: theme.danger, fontSize: 14, lineHeight: 20},
     commentBlock: {
       marginTop: 16,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: chrome.inputBorder,
+      borderTopColor: theme.inputBorder,
       paddingTop: 12,
     },
     commentLabel: {
-      color: chrome.textSecondary,
+      color: theme.textSecondary,
       fontSize: 12,
       fontWeight: '700',
       textTransform: 'uppercase',
@@ -331,18 +365,18 @@ function createStyles(chrome: FrostedPanelChrome) {
       minHeight: 72,
       maxHeight: 140,
       borderWidth: 1,
-      borderColor: chrome.inputBorder,
+      borderColor: theme.inputBorder,
       borderRadius: 8,
       paddingHorizontal: 10,
       paddingVertical: 8,
       fontSize: 13,
       lineHeight: 18,
-      color: chrome.textPrimary,
-      backgroundColor: chrome.inputBg,
+      color: theme.textPrimary,
+      backgroundColor: theme.inputBg,
     },
     commentHint: {
       marginTop: 8,
-      color: chrome.textSecondary,
+      color: theme.textSecondary,
       fontSize: 12,
       lineHeight: 16,
     },

@@ -21,6 +21,7 @@ export type FormsDetectRequest = {
 };
 
 export type FormsDetectResponse = {
+  documentType?: 'form' | 'informative';
   fields: Array<{
     id: string;
     name: string;
@@ -29,6 +30,11 @@ export type FormsDetectResponse = {
     rectNorm: RectNorm;
   }>;
   error?: string;
+};
+
+export type FormsDetectResult = {
+  documentType: 'form' | 'informative';
+  fields: DetectedFormField[];
 };
 
 let client: SupabaseClient | null = null;
@@ -168,17 +174,17 @@ function normalizeField(
 
 /**
  * Call Supabase Edge Function `forms-detect` (OpenAI vision server-side).
- * Returns normalized DetectedFormField[] or throws on transport/API errors.
+ * Returns documentType + fields, or throws on transport/API errors.
  */
 export async function invokeFormsDetect(
   pages: FormPageImage[],
-): Promise<DetectedFormField[]> {
+): Promise<FormsDetectResult> {
   const supabase = getSupabase();
   if (!supabase) {
     throw new Error('Supabase is not configured');
   }
   if (!pages.length) {
-    return [];
+    return {documentType: 'informative', fields: []};
   }
 
   const {data, error} = await supabase.functions.invoke('forms-detect', {
@@ -205,14 +211,34 @@ export async function invokeFormsDetect(
 
   const payload = data as FormsDetectResponse | null;
   if (!payload) {
-    return [];
+    return {documentType: 'informative', fields: []};
   }
   if (payload.error) {
     throw new Error(payload.error);
   }
 
-  const fields = Array.isArray(payload.fields) ? payload.fields : [];
-  return fields
-    .map((f, i) => normalizeField(f, i))
-    .filter((f): f is DetectedFormField => f != null);
+  const documentTypeRaw = String(payload.documentType || '')
+    .trim()
+    .toLowerCase();
+  const fieldsRaw = Array.isArray(payload.fields) ? payload.fields : [];
+  // Legacy edge responses omit documentType — infer from whether fields exist.
+  const documentType: 'form' | 'informative' =
+    documentTypeRaw === 'form'
+      ? 'form'
+      : documentTypeRaw === 'informative'
+        ? 'informative'
+        : fieldsRaw.length > 0
+          ? 'form'
+          : 'informative';
+
+  if (documentType === 'informative') {
+    return {documentType: 'informative', fields: []};
+  }
+
+  return {
+    documentType: 'form',
+    fields: fieldsRaw
+      .map((f, i) => normalizeField(f, i))
+      .filter((f): f is DetectedFormField => f != null),
+  };
 }

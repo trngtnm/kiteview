@@ -88,6 +88,7 @@ function App() {
   const setAnnotationMode = useAnnotationStore(s => s.setMode);
   const setUserComment = useAnnotationStore(s => s.setUserComment);
   const clearAnnotation = useAnnotationStore(s => s.clearAnnotation);
+  const clearViewingPin = useAnnotationStore(s => s.clearViewingPin);
 
   const pinnedPins = usePinnedAnnotationStore(s => s.pins);
   const selectedPinnedId = usePinnedAnnotationStore(s => s.selectedId);
@@ -436,7 +437,11 @@ function App() {
   );
 
   const onPinnedAnnotationClick = useCallback(
-    (id: string, source: 'highlight' | 'note' = 'highlight') => {
+    (
+      id: string,
+      source: 'highlight' | 'note' = 'highlight',
+      action: 'expand' | 'open' = 'open',
+    ) => {
       flushPendingComment();
       const pin = usePinnedAnnotationStore
         .getState()
@@ -446,18 +451,17 @@ function App() {
       const viewingId = useAnnotationStore.getState().viewingPinnedId;
       const selectedId = usePinnedAnnotationStore.getState().selectedId;
 
-      if (source === 'note') {
-        // 1st click: expand small note only
-        // 2nd click: open large gutter panel
-        // 3rd click: dismiss both
+      if (source === 'note' && action === 'expand') {
+        // Left click: little note only.
         if (viewingId === id) {
+          // Large is open → close it, keep little expanded.
           clearAnnotation();
-          clearPinnedActive();
+          selectPinned(id);
           return;
         }
         if (selectedId === id) {
-          selectPinned(id);
-          showPinnedAnnotation(pin);
+          // Already expanded → collapse.
+          clearPinnedActive();
           return;
         }
         clearAnnotation();
@@ -465,7 +469,7 @@ function App() {
         return;
       }
 
-      // Highlight click: open/toggle the large panel immediately.
+      // Right-click note or highlight click: expand + open large panel.
       if (viewingId === id) {
         clearAnnotation();
         clearPinnedActive();
@@ -520,8 +524,16 @@ function App() {
     flushPendingComment();
     if (!viewingPinnedId) return;
     await unpinAnnotation(viewingPinnedId);
-    clearAnnotation();
-  }, [clearAnnotation, flushPendingComment, unpinAnnotation, viewingPinnedId]);
+    clearPinnedActive();
+    // Keep the big panel open; just leave the unpinned state.
+    clearViewingPin();
+  }, [
+    clearPinnedActive,
+    clearViewingPin,
+    flushPendingComment,
+    unpinAnnotation,
+    viewingPinnedId,
+  ]);
 
   const onCloseAnnotation = useCallback(() => {
     flushPendingComment();
@@ -595,6 +607,18 @@ function App() {
       !viewingPinnedId,
   );
 
+  const smallNoteSide: 'left' | 'right' = (() => {
+    if (viewingPinnedId) {
+      const pin = pinnedPins.find(p => p.id === viewingPinnedId);
+      if (pin?.side === 'left' || pin?.side === 'right') return pin.side;
+    }
+    if (annotationRect) return chooseMarginSide(annotationRect);
+    return 'right';
+  })();
+  // Large gutter panel sits opposite the little margin note.
+  const largeAnnotationSide: 'left' | 'right' =
+    smallNoteSide === 'left' ? 'right' : 'left';
+
   const activeMarginAnnotation =
     activePhrase &&
     annotationRect &&
@@ -607,10 +631,34 @@ function App() {
           error: annotationError,
           pageNumber: annotationPageNumber,
           rectNorm: annotationRect,
-          side: chooseMarginSide(annotationRect),
+          side: smallNoteSide,
           pinId: viewingPinnedId,
+          userComment,
         }
       : null;
+
+  const annotationPanel = (
+    <AnnotationPanel
+      phrase={activePhrase}
+      mode={annotationMode}
+      status={annotationStatus}
+      annotation={annotation}
+      error={annotationError}
+      pageNumber={annotationPageNumber}
+      userComment={userComment}
+      pinned={Boolean(viewingPinnedId)}
+      canPin={canPin}
+      onModeChange={setAnnotationMode}
+      onUserCommentChange={onUserCommentChange}
+      onPin={() => {
+        void onPin();
+      }}
+      onUnpin={() => {
+        void onUnpin();
+      }}
+      onClose={onCloseAnnotation}
+    />
+  );
 
   const signedIn = Boolean(authUser);
   const accountLabel = authUser?.email?.trim() || 'Guest';
@@ -674,13 +722,8 @@ function App() {
       formsDetectLabel={formsDetectLabel}
       formsDetectDisabled={cascadeBusy}
       formFieldCount={showFormOverlays ? formFields.length : undefined}
-      onDownloadFilledPdf={
-        FORMS_ENABLED && file && formFields.length > 0
-          ? () => {
-              void onDownloadFilledPdf();
-            }
-          : undefined
-      }
+      // TEMP: hide Download PDF until export flow is ready to ship again.
+      onDownloadFilledPdf={undefined}
       downloadFilledDisabled={downloadBusy || cascadeBusy}
       downloadFilledLabel={downloadBusy ? 'Downloading…' : 'Download PDF'}
       onRenameFile={renameFile}
@@ -759,38 +802,26 @@ function App() {
             error={error}
             onClose={clearDefinition}
           />
-          <AnnotationPanel
-            phrase={activePhrase}
-            mode={annotationMode}
-            status={annotationStatus}
-            annotation={annotation}
-            error={annotationError}
-            pageNumber={annotationPageNumber}
-            userComment={userComment}
-            pinned={Boolean(viewingPinnedId)}
-            canPin={canPin}
-            onModeChange={setAnnotationMode}
-            onUserCommentChange={onUserCommentChange}
-            onPin={() => {
-              void onPin();
-            }}
-            onUnpin={() => {
-              void onUnpin();
-            }}
-            onClose={onCloseAnnotation}
-          />
+          {largeAnnotationSide === 'left' ? annotationPanel : null}
         </ScrollView>
       }
       rightGutter={
-        FORMS_ENABLED && file && formStatus !== 'idle' ? (
-          <FormFieldsPanel
-            status={formStatus}
-            fields={formFields}
-            selectedFieldId={selectedFieldId}
-            error={formError}
-            onSelectField={selectFormField}
-          />
-        ) : null
+        <ScrollView
+          style={{flex: 1, backgroundColor: 'transparent'}}
+          contentContainerStyle={{paddingBottom: 24}}
+          showsVerticalScrollIndicator={false}>
+          {largeAnnotationSide === 'right' ? annotationPanel : null}
+          {FORMS_ENABLED && file && formStatus !== 'idle' ? (
+            <FormFieldsPanel
+              status={formStatus}
+              fields={formFields}
+              selectedFieldId={selectedFieldId}
+              error={formError}
+              onSelectField={selectFormField}
+              onClose={clearFormAnalysis}
+            />
+          ) : null}
+        </ScrollView>
       }>
       {file ? (
         <PdfViewer

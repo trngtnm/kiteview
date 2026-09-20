@@ -8,12 +8,8 @@ import {
   View,
 } from 'react-native';
 import type {DefinitionStatus, WordDefinition} from '@kiteview/core';
-import {
-  FrostedPanel,
-  frostedPanelChromeFor,
-  type FrostedPanelChrome,
-} from './FrostedPanel';
-import {useColorScheme} from './ThemeProvider';
+import {useTheme} from './ThemeProvider';
+import type {Theme} from './theme';
 
 type DefinitionPanelProps = {
   word: string | null;
@@ -32,9 +28,8 @@ export function DefinitionPanel({
   error,
   onClose,
 }: DefinitionPanelProps) {
-  const scheme = useColorScheme();
-  const chrome = useMemo(() => frostedPanelChromeFor(scheme), [scheme]);
-  const styles = useMemo(() => createStyles(chrome), [chrome]);
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   if (!word || status === 'idle') {
     return null;
@@ -48,10 +43,7 @@ export function DefinitionPanel({
 
   return (
     <View style={styles.wrapper}>
-      <FrostedPanel
-        accessibilityLabel={`Definition of ${title}`}
-        scheme={scheme}
-        style={styles.card}>
+      <View style={styles.card} accessibilityLabel={`Definition of ${title}`}>
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={2}>
             {title}
@@ -75,7 +67,7 @@ export function DefinitionPanel({
 
         {status === 'loading' && !showDefinition ? (
           <View style={styles.centered}>
-            <ActivityIndicator color={chrome.accent} />
+            <ActivityIndicator color={theme.accent} />
             <Text style={styles.meta}>Looking up…</Text>
           </View>
         ) : null}
@@ -113,12 +105,12 @@ export function DefinitionPanel({
             ))}
           </ScrollView>
         ) : null}
-      </FrostedPanel>
+      </View>
     </View>
   );
 }
 
-function createStyles(chrome: FrostedPanelChrome) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     wrapper: {
       alignSelf: 'stretch',
@@ -133,8 +125,13 @@ function createStyles(chrome: FrostedPanelChrome) {
       maxWidth: PANEL_SOFT_MAX_WIDTH,
       padding: 14,
       borderRadius: 12,
+      backgroundColor: theme.pageSurface,
       borderWidth: 1,
-      borderColor: chrome.inputBorder,
+      borderColor: theme.inputBorder,
+      shadowColor: theme.shadow,
+      shadowOpacity: 0.1,
+      shadowRadius: 12,
+      shadowOffset: {width: 0, height: 2},
       maxHeight: 420,
     },
     header: {
@@ -145,7 +142,7 @@ function createStyles(chrome: FrostedPanelChrome) {
     },
     title: {
       flex: 1,
-      color: chrome.textPrimary,
+      color: theme.textPrimary,
       fontSize: 20,
       fontWeight: '700',
       letterSpacing: -0.3,
@@ -156,19 +153,19 @@ function createStyles(chrome: FrostedPanelChrome) {
       borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: chrome.chipBg,
+      backgroundColor: theme.chipBg,
     },
     closePressed: {
       opacity: 0.7,
     },
     closeLabel: {
-      color: chrome.textSecondary,
+      color: theme.textSecondary,
       fontSize: 13,
       fontWeight: '600',
     },
     phonetic: {
       marginTop: 4,
-      color: chrome.textSecondary,
+      color: theme.textSecondary,
       fontSize: 13,
     },
     centered: {
@@ -177,17 +174,17 @@ function createStyles(chrome: FrostedPanelChrome) {
       gap: 8,
     },
     meta: {
-      color: chrome.textSecondary,
+      color: theme.textSecondary,
       fontSize: 13,
     },
     metaInline: {
       marginTop: 8,
-      color: chrome.textSecondary,
+      color: theme.textSecondary,
       fontSize: 12,
     },
     error: {
       marginTop: 12,
-      color: chrome.danger,
+      color: theme.danger,
       fontSize: 14,
       lineHeight: 20,
     },
@@ -202,14 +199,14 @@ function createStyles(chrome: FrostedPanelChrome) {
       gap: 6,
     },
     pos: {
-      color: chrome.accent,
+      color: theme.accent,
       fontSize: 12,
       fontWeight: '600',
       fontStyle: 'italic',
       textTransform: 'lowercase',
     },
     definition: {
-      color: chrome.textPrimary,
+      color: theme.textPrimary,
       fontSize: 14,
       lineHeight: 20,
     },

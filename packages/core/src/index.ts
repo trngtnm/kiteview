@@ -73,6 +73,7 @@ export type {
   FormPageImage,
   FormsDetectRequest,
   FormsDetectResponse,
+  FormsDetectResult,
 } from './supabaseClient';
 export {useAuthStore} from './authStore';
 export type {AuthStatus} from './authStore';

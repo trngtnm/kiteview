@@ -14,7 +14,6 @@
 		6F085051970CD481FA718F00 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BBF05766C00BB9B1EE98F741 /* PrivacyInfo.xcprivacy */; };
 		776A15DCFA7EBDF084BF565F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BBF05766C00BB9B1EE98F741 /* PrivacyInfo.xcprivacy */; };
 		A7F1E0022437B4B30078DB4F /* KiteViewFilePicker.mm in Sources */ = {isa = PBXBuildFile; fileRef = A7F1E0042437B4B30078DB4F /* KiteViewFilePicker.mm */; };
-		A7F1E0122437B4B30078DB4F /* KiteViewVibrancyView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A7F1E0142437B4B30078DB4F /* KiteViewVibrancyView.mm */; };
 		F677CF77D8DF78F31BACA51D /* libPods-KiteView-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CEC3BEC112283D56DD3BED52 /* libPods-KiteView-macOS.a */; };
 /* End PBXBuildFile section */
 
@@ -32,8 +31,6 @@
 		9B5DE4C146B7F46F92A717CC /* Pods-KiteView-macOS.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-KiteView-macOS.debug.xcconfig"; path = "Target Support Files/Pods-KiteView-macOS/Pods-KiteView-macOS.debug.xcconfig"; sourceTree = "<group>"; };
 		A7F1E0032437B4B30078DB4F /* KiteViewFilePicker.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = KiteViewFilePicker.h; sourceTree = "<group>"; };
 		A7F1E0042437B4B30078DB4F /* KiteViewFilePicker.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = KiteViewFilePicker.mm; sourceTree = "<group>"; };
-		A7F1E0132437B4B30078DB4F /* KiteViewVibrancyView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = KiteViewVibrancyView.h; sourceTree = "<group>"; };
-		A7F1E0142437B4B30078DB4F /* KiteViewVibrancyView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = KiteViewVibrancyView.mm; sourceTree = "<group>"; };
 		BBF05766C00BB9B1EE98F741 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		CEC3BEC112283D56DD3BED52 /* libPods-KiteView-macOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-KiteView-macOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -73,8 +70,6 @@
 				5142014B2437B4B30078DB4F /* AppDelegate.h */,
 				A7F1E0032437B4B30078DB4F /* KiteViewFilePicker.h */,
 				A7F1E0042437B4B30078DB4F /* KiteViewFilePicker.mm */,
-				A7F1E0132437B4B30078DB4F /* KiteViewVibrancyView.h */,
-				A7F1E0142437B4B30078DB4F /* KiteViewVibrancyView.mm */,
 				5142014C2437B4B30078DB4F /* AppDelegate.mm */,
 				514201512437B4B40078DB4F /* Assets.xcassets */,
 				514201532437B4B40078DB4F /* Main.storyboard */,
@@ -343,7 +338,6 @@
 				514201582437B4B40078DB4F /* main.m in Sources */,
 				5142014D2437B4B30078DB4F /* AppDelegate.mm in Sources */,
 				A7F1E0022437B4B30078DB4F /* KiteViewFilePicker.mm in Sources */,
-				A7F1E0122437B4B30078DB4F /* KiteViewVibrancyView.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

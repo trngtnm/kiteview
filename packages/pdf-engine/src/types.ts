@@ -16,6 +16,7 @@ export type PinnedAnnotationView = {
   pageNumber: number;
   rectNorm: RectNorm;
   side: 'left' | 'right';
+  userComment?: string;
 };
 
 /** Live / expanded annotation card painted in the PDF margin next to the selection. */
@@ -28,6 +29,7 @@ export type ActiveMarginAnnotation = {
   rectNorm: RectNorm;
   side: 'left' | 'right';
   pinId?: string | null;
+  userComment?: string;
 };
 
 export type PdfViewerHandle = {
@@ -65,6 +67,7 @@ export type PdfViewerProps = {
   onPinnedAnnotationClick?: (
     id: string,
     source?: 'highlight' | 'note',
+    action?: 'expand' | 'open',
   ) => void;
   formFields?: DetectedFormField[];
   selectedFieldId?: string | null;

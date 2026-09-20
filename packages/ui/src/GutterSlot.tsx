@@ -42,10 +42,14 @@ function createStyles(theme: Theme) {
     leftGutter: {
       alignItems: 'stretch',
       overflow: 'hidden',
+      // Keep panel cards clear of the PDF column (mirrors right).
+      paddingRight: 12,
     },
     rightGutter: {
       alignItems: 'stretch',
       overflow: 'hidden',
+      // Same inset from the PDF as the left gutter.
+      paddingLeft: 12,
     },
   });
 }

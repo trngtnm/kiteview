@@ -91,16 +91,25 @@ Deno.serve(async (req: Request) => {
 
   const pages = Array.isArray(body.pages) ? body.pages.slice(0, MAX_PAGES) : [];
   if (pages.length === 0) {
-    return jsonResponse({fields: []});
+    return jsonResponse({documentType: 'informative', fields: []});
   }
 
   const content: Array<Record<string, unknown>> = [
     {
       type: 'text',
-      text: `You analyze PDF page images of forms. Find ONLY blank TEXT input regions (underscores, empty text lines, empty boxes meant for typing). Do NOT report checkboxes, radio buttons, signature pads, or dropdowns.
+      text: `You analyze PDF page images. First decide if the page is a FILLABLE FORM or INFORMATIONAL content, then find blank TEXT input regions only when it is a form.
+
 Return ONLY valid JSON (no markdown) matching:
-{"fields":[{"id":"string","name":"string","type":"text","pageNumber":1,"rectNorm":{"x":0,"y":0,"w":0,"h":0}}]}
-Rules:
+{"documentType":"form"|"informative","fields":[{"id":"string","name":"string","type":"text","pageNumber":1,"rectNorm":{"x":0,"y":0,"w":0,"h":0}}]}
+
+documentType rules:
+- "form": page is clearly meant for the reader to FILL IN (application, I-9, W-4, intake, survey, tax, enrollment). Labeled blanks for Name/Date/Address/Signature, empty input boxes, or signature lines.
+- "informative": articles, guides, letters, essays, textbooks, slides, reports, manuals, or other explanatory/reading pages. Prefer "informative" when unsure.
+- Decorative underlines, horizontal rules, table grids, TOC dots, list bullets, and already-printed text are NOT fillable blanks — classify as informative with fields [].
+- If informative, fields MUST be [].
+
+Field rules (only when documentType is "form"):
+- Find ONLY blank TEXT input regions (underscores, empty text lines, empty boxes meant for typing). Do NOT report checkboxes, radio buttons, signature pads, or dropdowns.
 - Every field MUST have type "text". Never emit checkbox, radio, dropdown, or signature.
 - rectNorm uses fractions of the FULL page image width/height (0 to 1). Origin is TOP-LEFT of the image as provided (not a square crop, not PDF bottom-left).
 - x,y = top-left of the blank TEXT INPUT; w,h = width/height of that blank only. Example: {"x":0.35,"y":0.22,"w":0.4,"h":0.025}.
@@ -111,7 +120,7 @@ Rules:
 - Do NOT box section headers, titles, instructions, table grid lines, checkboxes, or already-filled text.
 - Ignore letterboxing/padding; coords are relative to the page content image dimensions given per page.
 - pageNumber must match the page number given for each image.
-- If no text blanks, return {"fields":[]}.`,
+- If documentType is "form" but no text blanks, return {"documentType":"form","fields":[]}.`,
     },
   ];
 
@@ -171,13 +180,24 @@ Rules:
 
     const oaJson = await oaRes.json();
     const text: string =
-      oaJson?.choices?.[0]?.message?.content ?? '{"fields":[]}';
+      oaJson?.choices?.[0]?.message?.content ??
+      '{"documentType":"informative","fields":[]}';
 
-    let parsed: {fields?: unknown};
+    let parsed: {fields?: unknown; documentType?: unknown};
     try {
       parsed = JSON.parse(text);
     } catch {
       return jsonResponse({error: 'Model returned invalid JSON'}, 502);
+    }
+
+    const documentTypeRaw = String(parsed.documentType || '')
+      .trim()
+      .toLowerCase();
+    const documentType: 'form' | 'informative' =
+      documentTypeRaw === 'form' ? 'form' : 'informative';
+
+    if (documentType === 'informative') {
+      return jsonResponse({documentType: 'informative', fields: []});
     }
 
     const rawFields = Array.isArray(parsed.fields) ? parsed.fields : [];
@@ -254,7 +274,7 @@ Rules:
       });
     });
 
-    return jsonResponse({fields});
+    return jsonResponse({documentType: 'form', fields});
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return jsonResponse({error: message}, 500);

@@ -110,6 +110,14 @@ export const usePinnedAnnotationStore = create<PinnedAnnotationState>(
         set({documentKey: null, pins: [], selectedId: null, hydrated: true});
         return;
       }
+      // Clear immediately so a PDF switch doesn't keep the previous doc's pins
+      // painted, and so a late WebView ready event doesn't inject stale pins.
+      set({
+        documentKey: key,
+        pins: [],
+        selectedId: null,
+        hydrated: false,
+      });
       const all = await readAll();
       const pins = all
         .filter(p => p.documentKey === key)

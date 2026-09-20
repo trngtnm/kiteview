@@ -18,6 +18,7 @@ type FormFieldsPanelProps = {
   selectedFieldId: string | null;
   error: string | null;
   onSelectField: (id: string) => void;
+  onClose: () => void;
 };
 
 function typeMetaLabel(type: DetectedFormField['type']): string {
@@ -32,6 +33,7 @@ export function FormFieldsPanel({
   selectedFieldId,
   error,
   onSelectField,
+  onClose,
 }: FormFieldsPanelProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -43,7 +45,20 @@ export function FormFieldsPanel({
   return (
     <View style={styles.wrapper}>
       <View style={styles.card}>
-        <Text style={styles.title}>Form fields</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>Form fields</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close form fields"
+            onPress={onClose}
+            hitSlop={8}
+            style={({pressed}) => [
+              styles.closeBtn,
+              pressed && styles.closePressed,
+            ]}>
+            <Text style={styles.closeLabel}>✕</Text>
+          </Pressable>
+        </View>
 
         {status === 'loading' ? (
           <View style={styles.centered}>
@@ -57,7 +72,12 @@ export function FormFieldsPanel({
         ) : null}
 
         {status === 'none' ? (
-          <Text style={styles.meta}>No form fields found</Text>
+          <View style={styles.emptyBlock}>
+            <Text style={styles.meta}>No form fields found</Text>
+            <Text style={styles.emptyHint}>
+              This document doesn’t look like a fillable form.
+            </Text>
+          </View>
         ) : null}
 
         {status === 'ready' || fields.length > 0 ? (
@@ -107,7 +127,7 @@ function createStyles(theme: Theme) {
       alignSelf: 'stretch',
       width: '100%',
       paddingTop: 20,
-      paddingHorizontal: 8,
+      paddingHorizontal: 10,
       alignItems: 'stretch',
     },
     card: {
@@ -123,12 +143,35 @@ function createStyles(theme: Theme) {
       shadowOffset: {width: 0, height: 2},
       maxHeight: 420,
     },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      marginBottom: 8,
+    },
     title: {
+      flex: 1,
       color: theme.textPrimary,
       fontSize: 16,
       fontWeight: '700',
       letterSpacing: -0.2,
-      marginBottom: 8,
+    },
+    closeBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.chipBg,
+    },
+    closePressed: {
+      opacity: 0.7,
+    },
+    closeLabel: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
     },
     count: {
       color: theme.textSecondary,
@@ -144,6 +187,16 @@ function createStyles(theme: Theme) {
       color: theme.textSecondary,
       fontSize: 13,
       lineHeight: 18,
+    },
+    emptyBlock: {
+      marginTop: 4,
+      gap: 6,
+    },
+    emptyHint: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      lineHeight: 17,
+      opacity: 0.9,
     },
     error: {
       marginTop: 8,

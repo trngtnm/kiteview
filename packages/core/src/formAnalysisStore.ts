@@ -241,6 +241,58 @@ function bestSource(fields: DetectedFormField[]): FormDetectionSource {
   return null;
 }
 
+/**
+ * Heuristic/vision noise filter: only keep blanks that look like real form
+ * write areas (underscore/gap heur_*, wet-ink signature/date, or typed widgets).
+ */
+function hasStrongFormSignal(field: DetectedFormField): boolean {
+  if (field.source === 'acroform') return true;
+  if (field.type === 'signature' || field.type === 'date') return true;
+  const id = field.id || '';
+  if (id.startsWith('wet_') || id.startsWith('heur_')) return true;
+  return false;
+}
+
+function strongFormFields(fields: DetectedFormField[]): DetectedFormField[] {
+  return fields.filter(hasStrongFormSignal);
+}
+
+/** Held while vision classifies document type; discarded on informative. */
+let pendingHeuristicFields: DetectedFormField[] = [];
+
+function clearPendingHeuristics() {
+  pendingHeuristicFields = [];
+}
+
+function takePendingHeuristics(): DetectedFormField[] {
+  const next = pendingHeuristicFields;
+  pendingHeuristicFields = [];
+  return next;
+}
+
+function finalizeAsNone(
+  set: (
+    partial:
+      | Partial<FormAnalysisState>
+      | ((s: FormAnalysisState) => Partial<FormAnalysisState>),
+  ) => void,
+) {
+  clearPendingHeuristics();
+  set({
+    status: 'none',
+    fields: [],
+    selectedFieldId: null,
+    fieldValues: {},
+    detectionSource: null,
+    error: null,
+    cascadeStage: 'done',
+    acroPending: false,
+    webviewAcroPending: false,
+    visionPending: false,
+    heuristicPending: false,
+  });
+}
+
 let formAnalysisModulePromise: Promise<
   typeof import('@kiteview/pdf-engine/src/formAnalysis')
 > | null = null;
@@ -322,6 +374,9 @@ function finishIfIdle(
   if (state.fields.length === 0) {
     set({
       status: state.error ? 'error' : 'none',
+      fields: [],
+      selectedFieldId: null,
+      fieldValues: {},
       cascadeStage: 'done',
       detectionSource: null,
     });
@@ -348,7 +403,8 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
   heuristicPending: false,
   fallbacksSuppressed: false,
 
-  clear: () =>
+  clear: () => {
+    clearPendingHeuristics();
     set({
       status: 'idle',
       fields: [],
@@ -362,7 +418,8 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       visionPending: false,
       heuristicPending: false,
       fallbacksSuppressed: false,
-    }),
+    });
+  },
 
   selectField: id => set({selectedFieldId: id}),
 
@@ -371,7 +428,8 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       fieldValues: {...state.fieldValues, [id]: value},
     })),
 
-  markNone: () =>
+  markNone: () => {
+    clearPendingHeuristics();
     set({
       status: 'none',
       fields: [],
@@ -385,10 +443,12 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       visionPending: false,
       heuristicPending: false,
       fallbacksSuppressed: false,
-    }),
+    });
+  },
 
   startDetect: async (base64: string) => {
     const wantVision = isSupabaseConfigured();
+    clearPendingHeuristics();
 
     set({
       status: 'loading',
@@ -462,6 +522,7 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
     if (incoming.length > 0) {
       // Replace — do not keep heuristic/vision junk alongside real widgets.
       // WebView widgets are authoritative; stop waiting on pdf-lib / fallbacks.
+      clearPendingHeuristics();
       set({
         webviewAcroPending: false,
         acroPending: false,
@@ -479,6 +540,14 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
       return;
     }
     set({webviewAcroPending: false});
+    // Widgets missed — flush any heuristics held while Acro was pending,
+    // unless vision still owns document-type classification.
+    if (!get().visionPending && pendingHeuristicFields.length > 0) {
+      const held = takePendingHeuristics();
+      if (held.length > 0) {
+        publishMerged(set, get, held);
+      }
+    }
     finishIfIdle(set, get);
   },
 
@@ -487,56 +556,84 @@ export const useFormAnalysisStore = create<FormAnalysisState>((set, get) => ({
     if (stage !== 'scanning' && stage !== 'vision' && stage !== 'heuristic') {
       return;
     }
-    if (get().fallbacksSuppressed || get().webviewAcroPending) {
+    if (get().fallbacksSuppressed) {
       set({heuristicPending: false});
       finishIfIdle(set, get);
       return;
     }
-    const incoming = withSource(fields, 'heuristic');
+    // Only keep underscore/wet-ink style blanks — ignore weak noise.
+    const incoming = strongFormFields(withSource(fields, 'heuristic'));
     set({heuristicPending: false});
-    publishMerged(set, get, incoming);
+
+    // Wait for real widgets and/or vision document-type before publishing.
+    if (get().webviewAcroPending || get().visionPending) {
+      pendingHeuristicFields = incoming;
+      finishIfIdle(set, get);
+      return;
+    }
+
+    if (incoming.length > 0) {
+      publishMerged(set, get, incoming);
+    }
     finishIfIdle(set, get);
   },
 
   applyVisionFromPages: async pages => {
     if (get().fallbacksSuppressed || get().webviewAcroPending) {
+      clearPendingHeuristics();
       set({visionPending: false});
       finishIfIdle(set, get);
       return;
     }
 
-    const prior = get().fields;
-
     if (!isSupabaseConfigured()) {
       set({visionPending: false});
-      if (prior.length > 0) {
-        set({
-          status: 'ready',
-          detectionSource: bestSource(prior),
-          error: null,
-        });
+      const held = takePendingHeuristics();
+      if (held.length > 0) {
+        publishMerged(set, get, held);
       }
       finishIfIdle(set, get);
       return;
     }
 
     try {
-      const visionFields = withSource(await invokeFormsDetect(pages), 'vision');
+      const result = await invokeFormsDetect(pages);
       if (get().cascadeStage === 'idle') return;
       if (get().fallbacksSuppressed) {
+        clearPendingHeuristics();
         set({visionPending: false});
         finishIfIdle(set, get);
         return;
       }
       set({visionPending: false});
-      publishMerged(set, get, visionFields);
+
+      if (result.documentType === 'informative') {
+        // Vision says not a form — discard layout/vision speculation entirely.
+        finalizeAsNone(set);
+        return;
+      }
+
+      const held = takePendingHeuristics();
+      const visionFields = withSource(result.fields, 'vision');
+      const incoming = mergeFields(held, visionFields);
+      if (incoming.length > 0) {
+        publishMerged(set, get, incoming);
+      }
       finishIfIdle(set, get);
     } catch (err) {
       if (get().cascadeStage === 'idle') return;
       const message = err instanceof Error ? err.message : String(err);
+      set({visionPending: false});
+      // Vision failed: fall back to held layout blanks only.
+      const held = takePendingHeuristics();
+      if (held.length > 0) {
+        publishMerged(set, get, held);
+        set({error: message});
+        finishIfIdle(set, get);
+        return;
+      }
       const current = get().fields;
       set({
-        visionPending: false,
         error: message,
         status: current.length > 0 ? 'ready' : get().acroPending ? 'loading' : 'error',
         fields: current,

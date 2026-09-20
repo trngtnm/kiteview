@@ -231,7 +231,6 @@ export function ReaderShell({
                 {editingFileName.slice(0, selectionStart)}
               </Text>
             </View>
-            <Text style={styles.fileExtension}>.pdf</Text>
           </View>
         ) : null}
       </Animated.View>
@@ -392,15 +391,6 @@ function createStyles(theme: Theme) {
     fileNameInputFocused: {
       borderColor: theme.accent,
       borderWidth: 1,
-    },
-    fileExtension: {
-      color: theme.textSecondary,
-      backgroundColor: theme.fileInputBg,
-      fontSize: 13,
-      minHeight: 30,
-      paddingRight: 8,
-      paddingVertical: 6,
-      marginLeft: -4,
     },
     caretMeasure: {
       position: 'absolute',

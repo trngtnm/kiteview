@@ -32,6 +32,8 @@ type WebViewMessage = {
   rectNorm?: RectNorm;
   id?: string;
   value?: string;
+  source?: string;
+  action?: string;
   fields?: DetectedFormField[];
   pages?: FormPageImagePayload[];
 };
@@ -177,6 +179,7 @@ export function PdfViewer({
         pageNumber: p.pageNumber,
         rectNorm: p.rectNorm,
         side: p.side,
+        userComment: p.userComment ?? '',
       })),
     );
     const pinId =
@@ -244,6 +247,11 @@ export function PdfViewer({
         onMessage={event => {
           try {
             const data = JSON.parse(event.nativeEvent.data) as WebViewMessage;
+            if (data.type === 'webviewReady' || data.type === 'documentReady') {
+              // Re-push pins/forms after the bridge is live and again once pages
+              // exist — otherwise overlays stay empty until the next RN state change.
+              pushOverlayState();
+            }
             if (data.type === 'pageCount' && typeof data.count === 'number') {
               onPageCount?.(data.count);
             }
@@ -252,6 +260,9 @@ export function PdfViewer({
               typeof data.pageNumber === 'number'
             ) {
               onPageReady?.(data.pageNumber);
+              if (data.pageNumber === 1) {
+                pushOverlayState();
+              }
             }
             if (data.type === 'error' && data.message) {
               onError?.(data.message);
@@ -283,7 +294,13 @@ export function PdfViewer({
                 data.source === 'note' || data.source === 'highlight'
                   ? data.source
                   : 'highlight';
-              onPinnedAnnotationClick?.(data.id, source);
+              const action =
+                data.action === 'expand' || data.action === 'open'
+                  ? data.action
+                  : source === 'note'
+                    ? 'expand'
+                    : 'open';
+              onPinnedAnnotationClick?.(data.id, source, action);
             }
             if (data.type === 'formFieldClick' && typeof data.id === 'string') {
               onFormFieldClick?.(data.id);
