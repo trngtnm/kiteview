@@ -46,6 +46,7 @@ export type {
 export {
   useFormAnalysisStore,
   mergeFields,
+  dedupeFields,
   preloadFormAnalysis,
   VISION_SPARSE_THRESHOLD,
 } from './formAnalysisStore';
@@ -56,6 +57,11 @@ export type {
 } from './formAnalysisStore';
 export {
   getSupabase,
+  getSession,
+  onAuthStateChange,
+  signInWithPassword,
+  signUpWithPassword,
+  signOut,
   invokeFormsDetect,
   isSupabaseConfigured,
 } from './supabaseClient';
@@ -64,3 +70,19 @@ export type {
   FormsDetectRequest,
   FormsDetectResponse,
 } from './supabaseClient';
+export {useAuthStore} from './authStore';
+export type {AuthStatus} from './authStore';
+export {
+  usePreferencesStore,
+  DEFAULT_READING_PREFERENCES,
+  READING_LEVELS,
+  READING_TONES,
+  DOMAIN_TAG_OPTIONS,
+} from './preferencesStore';
+export type {
+  ReadingPreferences,
+  ReadingLevel,
+  ReadingTone,
+} from './preferencesStore';
+export {useAppearanceStore} from './appearanceStore';
+export type {AppearanceMode} from './appearanceStore';

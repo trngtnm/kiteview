@@ -1,8 +1,7 @@
-# KiteView local Supabase CLI config (functions only for now).
+# KiteView local Supabase CLI config.
 # Link to your project: `supabase link --project-ref <ref>`
 
-[project]
-id = "kiteview"
+project_id = "fikoneqkxohjequpmxjf"
 
 [api]
 enabled = true

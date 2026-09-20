@@ -18,6 +18,8 @@ export type PinnedAnnotation = {
   pageNumber: number;
   rectNorm: RectNorm;
   side: 'left' | 'right';
+  /** Optional user note attached to this pin. */
+  userComment?: string;
   createdAt: number;
 };
 
@@ -28,6 +30,7 @@ export type PinAnnotationInput = {
   mode: AnnotationMode;
   pageNumber: number;
   rectNorm: RectNorm;
+  userComment?: string;
 };
 
 const STORAGE_KEY = '@kiteview/pinned-annotations/v1';
@@ -84,6 +87,7 @@ type PinnedAnnotationState = {
   hydrated: boolean;
   loadForDocument: (documentKey: string) => Promise<void>;
   pinAnnotation: (input: PinAnnotationInput) => Promise<PinnedAnnotation | null>;
+  updatePinComment: (id: string, userComment: string) => Promise<boolean>;
   unpinAnnotation: (id: string) => Promise<void>;
   selectPinned: (id: string | null) => void;
   clearActive: () => void;
@@ -141,6 +145,7 @@ export const usePinnedAnnotationStore = create<PinnedAnnotationState>(
           pageNumber: Math.max(1, Math.floor(input.pageNumber) || 1),
           rectNorm,
           side: chooseMarginSide(rectNorm),
+          userComment: input.userComment?.trim() || undefined,
           createdAt: Date.now(),
         };
 
@@ -164,6 +169,33 @@ export const usePinnedAnnotationStore = create<PinnedAnnotationState>(
         return pin;
       } catch {
         return null;
+      }
+    },
+    updatePinComment: async (id, userComment) => {
+      try {
+        const trimmed = userComment.trim();
+        const all = await readAll();
+        let changed = false;
+        const nextAll = all.map(p => {
+          if (p.id !== id) return p;
+          changed = true;
+          return {
+            ...p,
+            userComment: trimmed || undefined,
+          };
+        });
+        if (!changed) return false;
+        await writeAll(nextAll);
+        const {documentKey} = get();
+        const pins = documentKey
+          ? nextAll
+              .filter(p => p.documentKey === documentKey)
+              .sort((a, b) => a.createdAt - b.createdAt)
+          : [];
+        set({pins});
+        return true;
+      } catch {
+        return false;
       }
     },
     unpinAnnotation: async id => {

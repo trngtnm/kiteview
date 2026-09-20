@@ -11,11 +11,13 @@ type NativePicker = {
   renamePdf: (uri: string, name: string) => Promise<PickedPdfFile>;
   annotatePhrase: (
     endpoint: string,
+    accessToken: string,
     anonKey: string,
     phrase: string,
     pageNumber?: number,
     annotationType?: string,
     context?: string,
+    customInstructions?: string,
   ) => Promise<unknown>;
 };
 
@@ -45,17 +47,28 @@ export function registerMacosPdfPicker(): void {
     return KiteViewFilePicker.renamePdf(uri, name);
   });
   registerAnnotatePhrase(
-    (endpoint, anonKey, phrase, pageNumber, annotationType, context) => {
+    (
+      endpoint,
+      accessToken,
+      anonKey,
+      phrase,
+      pageNumber,
+      annotationType,
+      context,
+      customInstructions,
+    ) => {
       if (!KiteViewFilePicker?.annotatePhrase) {
         throw new Error('KiteViewFilePicker native annotation is not linked');
       }
       return KiteViewFilePicker.annotatePhrase(
         endpoint,
+        accessToken,
         anonKey,
         phrase,
         pageNumber ?? 0,
         annotationType ?? 'explain',
         context ?? '',
+        customInstructions ?? '',
       );
     },
   );

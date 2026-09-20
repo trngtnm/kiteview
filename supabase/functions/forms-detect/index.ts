@@ -27,6 +27,8 @@ type PageInput = {
   pageNumber: number;
   imageBase64: string;
   mimeType?: string;
+  width?: number;
+  height?: number;
 };
 
 type DetectedField = {
@@ -38,18 +40,17 @@ type DetectedField = {
 };
 
 const MAX_PAGES = 1;
-const ALLOWED_TYPES = new Set<FieldType>([
-  'text',
-  'checkbox',
-  'radio',
-  'dropdown',
-  'signature',
-  'unknown',
-]);
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
   return Math.min(1, Math.max(0, n));
+}
+
+/** Accept 0–1 fractions or 0–100 percentages from the model. */
+function normUnit(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  if (n > 1) return clamp01(n / 100);
+  return clamp01(n);
 }
 
 function stripDataUrl(b64: string): string {
@@ -96,21 +97,20 @@ Deno.serve(async (req: Request) => {
   const content: Array<Record<string, unknown>> = [
     {
       type: 'text',
-      text: `You analyze PDF page images of forms. Find EVERY blank fillable region: text lines, checkboxes, signature areas, dropdowns.
+      text: `You analyze PDF page images of forms. Find ONLY blank TEXT input regions (underscores, empty text lines, empty boxes meant for typing). Do NOT report checkboxes, radio buttons, signature pads, or dropdowns.
 Return ONLY valid JSON (no markdown) matching:
-{"fields":[{"id":"string","name":"string","type":"text|checkbox|radio|dropdown|signature|unknown","pageNumber":1,"rectNorm":{"x":0,"y":0,"w":0,"h":0}}]}
+{"fields":[{"id":"string","name":"string","type":"text","pageNumber":1,"rectNorm":{"x":0,"y":0,"w":0,"h":0}}]}
 Rules:
-- rectNorm is normalized 0–1 with origin at the TOP-LEFT of the FULL page image (not the label text).
-- x,y = top-left corner of the blank INPUT area; w,h = size of that blank only.
-- Draw TIGHT boxes around blanks (underscores, empty boxes, signature lines). Prefer slightly undersized boxes over oversized ones.
-- Do not include the printed label in the box; place the box on the writable blank itself.
-- Checkboxes should be roughly square and cover only the checkbox glyph/box.
+- Every field MUST have type "text". Never emit checkbox, radio, dropdown, or signature.
+- rectNorm uses fractions of the FULL page image width/height (0 to 1). Origin is TOP-LEFT of the image as provided (not a square crop, not PDF bottom-left).
+- x,y = top-left of the blank TEXT INPUT; w,h = width/height of that blank only. Example: {"x":0.35,"y":0.22,"w":0.4,"h":0.025}.
+- NEVER use pixel coordinates or 0–100 percentages — only 0–1.
+- name MUST be the nearest printed label to that blank (e.g. "Full Name", "Email"). Do not invent names; do not use generic "Field 1".
+- Draw TIGHT boxes on the writable text blank only (underscores / empty text boxes). Prefer undersized to oversized. Do NOT include the label text inside the box.
+- Do NOT box section headers, titles, instructions, table grid lines, checkboxes, or already-filled text.
+- Ignore letterboxing/padding; coords are relative to the page content image dimensions given per page.
 - pageNumber must match the page number given for each image.
-- Report all empty blanks on the page; do not stop after a few.
-- Prefer empty blanks, not filled text.
-- name should be a short semantic label (e.g. "Full Name", "Date", "Signature").
-- Skip decorative lines and table grid lines that are not fillable.
-- If no blanks, return {"fields":[]}.`,
+- If no text blanks, return {"fields":[]}.`,
     },
   ];
 
@@ -119,9 +119,15 @@ Rules:
     const mime = page.mimeType || 'image/jpeg';
     const raw = stripDataUrl(String(page.imageBase64 || ''));
     if (!raw) continue;
+    const w = Number(page.width) || 0;
+    const h = Number(page.height) || 0;
+    const sizeHint =
+      w > 0 && h > 0
+        ? ` (${w}×${h}px). rectNorm is relative to this ${w}×${h} image.`
+        : '.';
     content.push({
       type: 'text',
-      text: `Page ${pageNumber}:`,
+      text: `Page ${pageNumber}${sizeHint}`,
     });
     content.push({
       type: 'image_url',
@@ -179,14 +185,54 @@ Rules:
     rawFields.forEach((raw: Record<string, unknown>, index: number) => {
       const rect = raw.rectNorm as Record<string, unknown> | undefined;
       if (!rect) return;
-      const x = clamp01(Number(rect.x));
-      const y = clamp01(Number(rect.y));
-      const w = clamp01(Number(rect.w));
-      const h = clamp01(Number(rect.h));
-      if (w <= 0.005 || h <= 0.005) return;
+      let x = normUnit(Number(rect.x));
+      let y = normUnit(Number(rect.y));
+      let w = normUnit(Number(rect.w));
+      let h = normUnit(Number(rect.h));
 
-      const typeRaw = String(raw.type || 'unknown') as FieldType;
-      const type = ALLOWED_TYPES.has(typeRaw) ? typeRaw : 'unknown';
+      // Model sometimes returns bottom-right as w/h (x2,y2).
+      const rawX = Number(rect.x);
+      const rawY = Number(rect.y);
+      const rawW = Number(rect.w);
+      const rawH = Number(rect.h);
+      if (
+        Number.isFinite(rawX) &&
+        Number.isFinite(rawY) &&
+        Number.isFinite(rawW) &&
+        Number.isFinite(rawH) &&
+        rawW > rawX &&
+        rawH > rawY &&
+        rawW <= 1.0001 &&
+        rawH <= 1.0001 &&
+        rawX >= 0 &&
+        rawY >= 0
+      ) {
+        const asWidth = rawW - rawX;
+        const asHeight = rawH - rawY;
+        // Prefer x2/y2 decode when "width" would be implausibly large for a blank.
+        if (asWidth > 0.005 && asHeight > 0.005 && (w > 0.45 || h > 0.45)) {
+          x = clamp01(rawX);
+          y = clamp01(rawY);
+          w = clamp01(asWidth);
+          h = clamp01(asHeight);
+        }
+      }
+
+      if (w <= 0.005 || h <= 0.005) return;
+      if (x + w > 1) w = Math.max(0.005, 1 - x);
+      if (y + h > 1) h = Math.max(0.005, 1 - y);
+
+      const typeRaw = String(raw.type || 'text') as FieldType;
+      // Text-only: drop non-text types; coerce unknown → text.
+      if (
+        typeRaw === 'checkbox' ||
+        typeRaw === 'radio' ||
+        typeRaw === 'dropdown' ||
+        typeRaw === 'signature'
+      ) {
+        return;
+      }
+      const type: FieldType = 'text';
       const pageNumber = Math.max(1, Math.floor(Number(raw.pageNumber) || 1));
       const name = String(raw.name || `Field ${index + 1}`).slice(0, 120);
       const id = String(raw.id || `vision_${pageNumber}_${index}`);

@@ -105,16 +105,18 @@ RCT_EXPORT_METHOD(renamePdf:(NSString *)uri
 }
 
 RCT_EXPORT_METHOD(annotatePhrase:(NSString *)endpoint
+                  accessToken:(NSString *)accessToken
                   anonKey:(NSString *)anonKey
                   phrase:(NSString *)phrase
                   pageNumber:(NSNumber *)pageNumber
                   annotationType:(NSString *)annotationType
                   context:(NSString *)context
+                  customInstructions:(NSString *)customInstructions
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
   NSURL *url = [NSURL URLWithString:endpoint];
-  if (url == nil || anonKey.length == 0 || phrase.length == 0) {
+  if (url == nil || accessToken.length == 0 || anonKey.length == 0 || phrase.length == 0) {
     reject(@"invalid_request", @"GPT endpoint configuration is invalid", nil);
     return;
   }
@@ -123,7 +125,7 @@ RCT_EXPORT_METHOD(annotatePhrase:(NSString *)endpoint
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
   request.HTTPMethod = @"POST";
   [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-  [request setValue:[NSString stringWithFormat:@"Bearer %@", anonKey] forHTTPHeaderField:@"Authorization"];
+  [request setValue:[NSString stringWithFormat:@"Bearer %@", accessToken] forHTTPHeaderField:@"Authorization"];
   [request setValue:anonKey forHTTPHeaderField:@"apikey"];
   NSMutableDictionary *body = [@{
     @"selection_text": phrase ?: @"",
@@ -133,6 +135,9 @@ RCT_EXPORT_METHOD(annotatePhrase:(NSString *)endpoint
   } mutableCopy];
   if (context != nil && context.length > 0) {
     body[@"context"] = context;
+  }
+  if (customInstructions != nil && customInstructions.length > 0) {
+    body[@"custom_instructions"] = customInstructions;
   }
   NSError *serializationError = nil;
   NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&serializationError];

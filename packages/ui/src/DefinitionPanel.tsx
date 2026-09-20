@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useMemo} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,7 +8,8 @@ import {
   View,
 } from 'react-native';
 import type {DefinitionStatus, WordDefinition} from '@kiteview/core';
-import {theme} from './theme';
+import {useTheme} from './ThemeProvider';
+import type {Theme} from './theme';
 
 type DefinitionPanelProps = {
   word: string | null;
@@ -18,7 +19,6 @@ type DefinitionPanelProps = {
   onClose: () => void;
 };
 
-/** Soft cap so the card stays readable on ultrawide gutters; still clipped by gutter. */
 const PANEL_SOFT_MAX_WIDTH = 320;
 
 export function DefinitionPanel({
@@ -28,6 +28,9 @@ export function DefinitionPanel({
   error,
   onClose,
 }: DefinitionPanelProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   if (!word || status === 'idle') {
     return null;
   }
@@ -107,103 +110,105 @@ export function DefinitionPanel({
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    alignSelf: 'stretch',
-    width: '100%',
-    paddingTop: 20,
-    paddingHorizontal: 10,
-    alignItems: 'stretch',
-  },
-  card: {
-    alignSelf: 'stretch',
-    width: '100%',
-    maxWidth: PANEL_SOFT_MAX_WIDTH,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.82)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.72)',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: {width: 0, height: 2},
-    maxHeight: 420,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  title: {
-    flex: 1,
-    color: theme.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F0F0F2',
-  },
-  closePressed: {
-    opacity: 0.7,
-  },
-  closeLabel: {
-    color: theme.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  phonetic: {
-    marginTop: 4,
-    color: theme.textSecondary,
-    fontSize: 13,
-  },
-  centered: {
-    marginTop: 16,
-    alignItems: 'center',
-    gap: 8,
-  },
-  meta: {
-    color: theme.textSecondary,
-    fontSize: 13,
-  },
-  metaInline: {
-    marginTop: 8,
-    color: theme.textSecondary,
-    fontSize: 12,
-  },
-  error: {
-    marginTop: 12,
-    color: '#C62828',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  body: {
-    marginTop: 12,
-  },
-  bodyContent: {
-    paddingBottom: 4,
-    gap: 12,
-  },
-  meaning: {
-    gap: 6,
-  },
-  pos: {
-    color: theme.accent,
-    fontSize: 12,
-    fontWeight: '600',
-    fontStyle: 'italic',
-    textTransform: 'lowercase',
-  },
-  definition: {
-    color: theme.textPrimary,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-});
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    wrapper: {
+      alignSelf: 'stretch',
+      width: '100%',
+      paddingTop: 20,
+      paddingHorizontal: 10,
+      alignItems: 'stretch',
+    },
+    card: {
+      alignSelf: 'stretch',
+      width: '100%',
+      maxWidth: PANEL_SOFT_MAX_WIDTH,
+      padding: 14,
+      borderRadius: 12,
+      backgroundColor: theme.pageSurface,
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+      shadowColor: theme.shadow,
+      shadowOpacity: 0.1,
+      shadowRadius: 12,
+      shadowOffset: {width: 0, height: 2},
+      maxHeight: 420,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    title: {
+      flex: 1,
+      color: theme.textPrimary,
+      fontSize: 20,
+      fontWeight: '700',
+      letterSpacing: -0.3,
+    },
+    closeBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.chipBg,
+    },
+    closePressed: {
+      opacity: 0.7,
+    },
+    closeLabel: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    phonetic: {
+      marginTop: 4,
+      color: theme.textSecondary,
+      fontSize: 13,
+    },
+    centered: {
+      marginTop: 16,
+      alignItems: 'center',
+      gap: 8,
+    },
+    meta: {
+      color: theme.textSecondary,
+      fontSize: 13,
+    },
+    metaInline: {
+      marginTop: 8,
+      color: theme.textSecondary,
+      fontSize: 12,
+    },
+    error: {
+      marginTop: 12,
+      color: theme.danger,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    body: {
+      marginTop: 12,
+    },
+    bodyContent: {
+      paddingBottom: 4,
+      gap: 12,
+    },
+    meaning: {
+      gap: 6,
+    },
+    pos: {
+      color: theme.accent,
+      fontSize: 12,
+      fontWeight: '600',
+      fontStyle: 'italic',
+      textTransform: 'lowercase',
+    },
+    definition: {
+      color: theme.textPrimary,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+  });
+}

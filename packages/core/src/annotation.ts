@@ -1,5 +1,7 @@
 import {getEnv} from './env';
 import {annotatePhrase} from './filePicker';
+import {useAuthStore} from './authStore';
+import {usePreferencesStore} from './preferencesStore';
 
 export type AnnotationMode = 'explain' | 'summarize';
 
@@ -162,10 +164,20 @@ export async function fetchPhraseAnnotation(
     );
   }
 
+  const anonKey = getEnv().supabaseAnonKey;
+  const accessToken =
+    useAuthStore.getState().session?.access_token || anonKey;
+  if (!anonKey) {
+    throw new Error('SUPABASE_ANON_KEY is not configured');
+  }
+
+  const customInstructions =
+    usePreferencesStore.getState().preferences.customInstructions.trim().slice(0, 1000);
+
   const headers = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${getEnv().supabaseAnonKey}`,
-    apikey: getEnv().supabaseAnonKey,
+    Authorization: `Bearer ${accessToken}`,
+    apikey: anonKey,
   };
   const body = JSON.stringify({
     selection_text: selection,
@@ -173,6 +185,7 @@ export async function fetchPhraseAnnotation(
     page_number: pageNumber,
     annotation_type: mode,
     ...(context ? {context} : {}),
+    ...(customInstructions ? {custom_instructions: customInstructions} : {}),
   });
 
   let lastRaw: unknown;
@@ -183,11 +196,13 @@ export async function fetchPhraseAnnotation(
   try {
     const nativeRaw = await annotatePhrase(
       endpoint,
-      getEnv().supabaseAnonKey,
+      accessToken,
+      anonKey,
       selection,
       pageNumber,
       mode,
       context,
+      customInstructions,
     );
     lastRaw = nativeRaw;
     const nativeContent = extractContent(nativeRaw);

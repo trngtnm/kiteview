@@ -1,5 +1,10 @@
 import 'react-native-url-polyfill/auto';
-import {createClient, type SupabaseClient} from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  createClient,
+  type Session,
+  type SupabaseClient,
+} from '@supabase/supabase-js';
 import type {DetectedFormField, FormFieldType, RectNorm} from '@kiteview/pdf-engine';
 import {getEnv} from './env';
 
@@ -7,6 +12,8 @@ export type FormPageImage = {
   pageNumber: number;
   imageBase64: string;
   mimeType: 'image/jpeg';
+  width?: number;
+  height?: number;
 };
 
 export type FormsDetectRequest = {
@@ -40,12 +47,84 @@ export function getSupabase(): SupabaseClient | null {
     const env = getEnv();
     client = createClient(env.supabaseUrl, env.supabaseAnonKey, {
       auth: {
-        persistSession: false,
-        autoRefreshToken: false,
+        storage: AsyncStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
       },
     });
   }
   return client;
+}
+
+export async function getSession(): Promise<Session | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const {data, error} = await supabase.auth.getSession();
+  if (error) {
+    throw error;
+  }
+  return data.session ?? null;
+}
+
+export function onAuthStateChange(
+  callback: (session: Session | null) => void,
+): () => void {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return () => {};
+  }
+  const {data} = supabase.auth.onAuthStateChange((_event, session) => {
+    callback(session);
+  });
+  return () => {
+    data.subscription.unsubscribe();
+  };
+}
+
+export async function signInWithPassword(
+  email: string,
+  password: string,
+): Promise<{session: Session | null; error: string | null}> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return {session: null, error: 'Supabase is not configured'};
+  }
+  const {data, error} = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+  return {
+    session: data.session ?? null,
+    error: error?.message ?? null,
+  };
+}
+
+export async function signUpWithPassword(
+  email: string,
+  password: string,
+): Promise<{session: Session | null; error: string | null}> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return {session: null, error: 'Supabase is not configured'};
+  }
+  const {data, error} = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+  });
+  return {
+    session: data.session ?? null,
+    error: error?.message ?? null,
+  };
+}
+
+export async function signOut(): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const {error} = await supabase.auth.signOut();
+  if (error) {
+    throw error;
+  }
 }
 
 function clamp01(n: number): number {
@@ -65,15 +144,18 @@ function normalizeField(
   const h = clamp01(Number(rect.h));
   if (w <= 0.005 || h <= 0.005) return null;
 
-  const allowed: FormFieldType[] = [
-    'text',
-    'checkbox',
-    'radio',
-    'dropdown',
-    'signature',
-    'unknown',
-  ];
-  const type = allowed.includes(raw.type) ? raw.type : 'unknown';
+  const allowed: FormFieldType[] = ['text', 'unknown'];
+  let type = allowed.includes(raw.type) ? raw.type : 'text';
+  // Text-only detection — drop checkbox/radio/signature/dropdown from vision.
+  if (
+    raw.type === 'checkbox' ||
+    raw.type === 'radio' ||
+    raw.type === 'dropdown' ||
+    raw.type === 'signature'
+  ) {
+    return null;
+  }
+  if (type === 'unknown') type = 'text';
 
   return {
     id: raw.id || `vision_${index}`,

@@ -5,6 +5,8 @@ export type FormPageImagePayload = {
   pageNumber: number;
   imageBase64: string;
   mimeType: 'image/jpeg';
+  width?: number;
+  height?: number;
 };
 
 export type PinnedAnnotationView = {
@@ -14,6 +16,18 @@ export type PinnedAnnotationView = {
   pageNumber: number;
   rectNorm: RectNorm;
   side: 'left' | 'right';
+};
+
+/** Live / expanded annotation card painted in the PDF margin next to the selection. */
+export type ActiveMarginAnnotation = {
+  phrase: string;
+  content: string;
+  status: 'loading' | 'ready' | 'error';
+  error?: string | null;
+  pageNumber: number;
+  rectNorm: RectNorm;
+  side: 'left' | 'right';
+  pinId?: string | null;
 };
 
 export type PdfViewerHandle = {
@@ -39,6 +53,8 @@ export type PdfViewerProps = {
   ) => void;
   pinnedAnnotations?: PinnedAnnotationView[];
   selectedPinnedId?: string | null;
+  activeMarginAnnotation?: ActiveMarginAnnotation | null;
+  colorScheme?: 'light' | 'dark';
   onPinnedAnnotationClick?: (id: string) => void;
   formFields?: DetectedFormField[];
   selectedFieldId?: string | null;

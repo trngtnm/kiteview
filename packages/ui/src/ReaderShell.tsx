@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
   findNodeHandle,
@@ -14,11 +14,12 @@ import {EmptyState} from './EmptyState';
 import {GutterSlot} from './GutterSlot';
 import {SidebarRail} from './SidebarRail';
 import type {DocumentTab} from '@kiteview/core';
+import {useTheme} from './ThemeProvider';
 import {
   PDF_COLUMN_MAX_WIDTH,
   RAIL_WIDTH,
   STAGE_SCROLLBAR_WIDTH,
-  theme,
+  type Theme,
 } from './theme';
 
 const KeyboardSurface = View as React.ComponentType<any>;
@@ -39,6 +40,14 @@ type ReaderShellProps = {
   formsDetectLabel?: string;
   formsDetectDisabled?: boolean;
   formFieldCount?: number;
+  accountLabel?: string;
+  onOpenAccount?: () => void;
+  onOpenPreferences?: () => void;
+  onSignOut?: () => void;
+  colorScheme?: 'light' | 'dark';
+  onToggleAppearance?: () => void;
+  /** Auth / preferences card — shown over the stage even with no PDF open. */
+  accountPanel?: React.ReactNode;
   /** Content for the left gutter (e.g. definition panel). */
   leftGutter?: React.ReactNode;
   /** Content for the right gutter (e.g. form fields panel). */
@@ -48,10 +57,7 @@ type ReaderShellProps = {
 
 /**
  * Fora-inspired reader chrome:
- * collapsible left rail + main stage with centered column and empty side gutters
- * (reserved for future AI annotations / comments / descriptions).
- * fixed left rail + main stage with centered column and empty side gutters
- * (left gutter hosts definition / future AI annotations).
+ * collapsible left rail + main stage with centered column and empty side gutters.
  */
 export function ReaderShell({
   fileName,
@@ -68,10 +74,19 @@ export function ReaderShell({
   formsDetectLabel,
   formsDetectDisabled,
   formFieldCount,
+  accountLabel,
+  onOpenAccount,
+  onOpenPreferences,
+  onSignOut,
+  colorScheme = 'light',
+  onToggleAppearance,
+  accountPanel,
   leftGutter,
   rightGutter,
   children,
 }: ReaderShellProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const hasDocument = Boolean(children);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [nameFieldFocused, setNameFieldFocused] = useState(false);
@@ -85,8 +100,6 @@ export function ReaderShell({
   );
   const nameInputRef = useRef<TextInput>(null);
   const sidebarOffset = useRef(new Animated.Value(0)).current;
-  // Inset the stage when the rail is open so gutters/PDF never sit under it.
-  // Do not translate the WebView — that offsets caret/highlight hit-testing.
   const stageLeft = sidebarOffset.interpolate({
     inputRange: [-RAIL_WIDTH, 0],
     outputRange: [0, RAIL_WIDTH],
@@ -164,6 +177,11 @@ export function ReaderShell({
           ) : (
             <EmptyState onSelectFile={onSelectFile} />
           )}
+          {accountPanel ? (
+            <View style={styles.accountOverlay} pointerEvents="box-none">
+              {accountPanel}
+            </View>
+          ) : null}
         </View>
         {fileName ? (
           <View style={styles.fileNameBar}>
@@ -182,9 +200,10 @@ export function ReaderShell({
                 }
                 onSubmitEditing={() => onSaveFile(editingFileName.trim())}
                 placeholder="PDF name"
+                placeholderTextColor={theme.textSecondary}
                 caretHidden={false}
-                cursorColor="#000000"
-                selectionColor="#000000"
+                cursorColor={theme.textPrimary}
+                selectionColor={theme.accent}
                 style={[
                   styles.fileNameInput,
                   nameFieldFocused && styles.fileNameInputFocused,
@@ -226,6 +245,12 @@ export function ReaderShell({
           formsDetectLabel={formsDetectLabel}
           formsDetectDisabled={formsDetectDisabled}
           formFieldCount={formFieldCount}
+          accountLabel={accountLabel}
+          onOpenAccount={onOpenAccount}
+          onOpenPreferences={onOpenPreferences}
+          onSignOut={onSignOut}
+          colorScheme={colorScheme}
+          onToggleAppearance={onToggleAppearance}
         />
         <Pressable
           accessibilityLabel={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
@@ -233,10 +258,7 @@ export function ReaderShell({
           onPress={toggleSidebar}
           onHoverIn={() => setToggleHover(true)}
           onHoverOut={() => setToggleHover(false)}
-          style={({pressed}) => [
-            styles.revealButton,
-            toggleHovered && styles.toggleHovered,
-          ]}>
+          style={[styles.revealButton, toggleHovered && styles.toggleHovered]}>
           <Animated.View
             pointerEvents="none"
             style={[
@@ -256,142 +278,150 @@ export function ReaderShell({
   );
 }
 
-const styles = StyleSheet.create({
-  window: {
-    flex: 1,
-    position: 'relative',
-    backgroundColor: theme.windowBg,
-  },
-  stage: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: theme.stageBg,
-    overflow: 'hidden',
-  },
-  readerLayer: {
-    flex: 1,
-  },
-  documentStage: {
-    flex: 1,
-    position: 'relative',
-  },
-  pdfLayer: {
-    flex: 1,
-  },
-  gutterOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingRight: STAGE_SCROLLBAR_WIDTH,
-  },
-  pdfColumnSpacer: {
-    flexGrow: 0,
-    flexShrink: 1,
-    width: PDF_COLUMN_MAX_WIDTH,
-    maxWidth: PDF_COLUMN_MAX_WIDTH,
-    pointerEvents: 'none',
-  },
-  revealButton: {
-    position: 'absolute',
-    left: RAIL_WIDTH + 10,
-    bottom: 12,
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#8BB5F2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: {width: 0, height: 3},
-    zIndex: 30,
-    overflow: 'hidden',
-  },
-  sidebarLayer: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: RAIL_WIDTH,
-    zIndex: 10,
-  },
-  fileNameBar: {
-    position: 'absolute',
-    right: 16,
-    bottom: 12,
-    maxWidth: 360,
-    minWidth: 180,
-    zIndex: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  fileNameInput: {
-    color: theme.textPrimary,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    borderColor: '#A1A1A6',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 13,
-    minHeight: 30,
-    flex: 1,
-    width: '100%',
-  },
-  inputShell: {
-    flex: 1,
-    position: 'relative',
-  },
-  fileNameInputFocused: {
-    borderColor: theme.accent,
-    borderWidth: 1,
-  },
-  fileExtension: {
-    color: theme.textSecondary,
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
-    fontSize: 13,
-    minHeight: 30,
-    paddingRight: 8,
-    paddingVertical: 6,
-    marginLeft: -4,
-  },
-  caretMeasure: {
-    position: 'absolute',
-    left: 10,
-    top: 7,
-    opacity: 0,
-    color: theme.textPrimary,
-    fontSize: 13,
-  },
-  customCaret: {
-    position: 'absolute',
-    top: 7,
-    width: 1,
-    height: 17,
-    backgroundColor: '#000000',
-  },
-  revealLabel: {
-    color: theme.accent,
-    fontSize: 22,
-    fontWeight: '600',
-    lineHeight: 22,
-    marginTop: -1,
-  },
-  toggleHoverFill: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(45, 127, 249, 0.24)',
-  },
-  toggleHovered: {
-    borderColor: '#4B91E7',
-    backgroundColor: '#EAF3FF',
-  },
-  pressed: {
-    opacity: 0.85,
-  },
-});
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    window: {
+      flex: 1,
+      position: 'relative',
+      backgroundColor: theme.windowBg,
+    },
+    stage: {
+      position: 'absolute',
+      right: 0,
+      top: 0,
+      bottom: 0,
+      backgroundColor: theme.stageBg,
+      overflow: 'hidden',
+    },
+    readerLayer: {
+      flex: 1,
+    },
+    accountOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 20,
+      justifyContent: 'flex-start',
+      alignItems: 'flex-start',
+      paddingTop: 24,
+      paddingLeft: 16,
+      paddingRight: 16,
+    },
+    documentStage: {
+      flex: 1,
+      position: 'relative',
+    },
+    pdfLayer: {
+      flex: 1,
+    },
+    gutterOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      paddingRight: STAGE_SCROLLBAR_WIDTH,
+    },
+    pdfColumnSpacer: {
+      flexGrow: 0,
+      flexShrink: 1,
+      width: PDF_COLUMN_MAX_WIDTH,
+      maxWidth: PDF_COLUMN_MAX_WIDTH,
+      pointerEvents: 'none',
+    },
+    revealButton: {
+      position: 'absolute',
+      left: RAIL_WIDTH + 10,
+      bottom: 12,
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: theme.pageSurface,
+      borderWidth: 1.5,
+      borderColor: theme.accentBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: theme.shadow,
+      shadowOpacity: 0.2,
+      shadowRadius: 10,
+      shadowOffset: {width: 0, height: 3},
+      zIndex: 30,
+      overflow: 'hidden',
+    },
+    sidebarLayer: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: RAIL_WIDTH,
+      zIndex: 10,
+    },
+    fileNameBar: {
+      position: 'absolute',
+      right: 16,
+      bottom: 12,
+      maxWidth: 360,
+      minWidth: 180,
+      zIndex: 15,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    fileNameInput: {
+      color: theme.textPrimary,
+      backgroundColor: theme.fileInputBg,
+      borderColor: theme.inputBorder,
+      borderWidth: 1,
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      fontSize: 13,
+      minHeight: 30,
+      flex: 1,
+      width: '100%',
+    },
+    inputShell: {
+      flex: 1,
+      position: 'relative',
+    },
+    fileNameInputFocused: {
+      borderColor: theme.accent,
+      borderWidth: 1,
+    },
+    fileExtension: {
+      color: theme.textSecondary,
+      backgroundColor: theme.fileInputBg,
+      fontSize: 13,
+      minHeight: 30,
+      paddingRight: 8,
+      paddingVertical: 6,
+      marginLeft: -4,
+    },
+    caretMeasure: {
+      position: 'absolute',
+      left: 10,
+      top: 7,
+      opacity: 0,
+      color: theme.textPrimary,
+      fontSize: 13,
+    },
+    customCaret: {
+      position: 'absolute',
+      top: 7,
+      width: 1,
+      height: 17,
+      backgroundColor: theme.textPrimary,
+    },
+    revealLabel: {
+      color: theme.accent,
+      fontSize: 22,
+      fontWeight: '600',
+      lineHeight: 22,
+      marginTop: -1,
+    },
+    toggleHoverFill: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.hoverFill,
+    },
+    toggleHovered: {
+      borderColor: theme.accentHover,
+      backgroundColor: theme.tabBgActive,
+    },
+  });
+}

@@ -18,6 +18,8 @@ type AnnotationState = {
   status: AnnotationStatus;
   annotation: PhraseAnnotation | null;
   error: string | null;
+  /** User-authored note for the active annotation. */
+  userComment: string;
   /** When viewing a saved pin, track its id so the panel can unpin. */
   viewingPinnedId: string | null;
   requestAnnotation: (
@@ -34,7 +36,9 @@ type AnnotationState = {
     mode: AnnotationMode;
     pageNumber: number;
     rectNorm: RectNorm;
+    userComment?: string;
   }) => void;
+  setUserComment: (comment: string) => void;
   setMode: (mode: AnnotationMode) => void;
   clearAnnotation: () => void;
 };
@@ -48,6 +52,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   status: 'idle',
   annotation: null,
   error: null,
+  userComment: '',
   viewingPinnedId: null,
   clearAnnotation: () =>
     set({
@@ -59,8 +64,10 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       status: 'idle',
       annotation: null,
       error: null,
+      userComment: '',
       viewingPinnedId: null,
     }),
+  setUserComment: comment => set({userComment: comment}),
   showPinnedAnnotation: pin =>
     set({
       activePhrase: pin.phrase,
@@ -75,6 +82,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         mode: pin.mode,
       },
       error: null,
+      userComment: pin.userComment ?? '',
       viewingPinnedId: pin.id,
     }),
   setMode: mode => {
@@ -82,7 +90,6 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       get();
     if (mode === current) return;
     if (viewingPinnedId) {
-      // Viewing a saved pin — switching mode re-fetches but keeps geometry.
       if (!activePhrase) {
         set({mode});
         return;
@@ -124,6 +131,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       error: null,
       viewingPinnedId: null,
       annotation: null,
+      userComment: '',
     });
     try {
       const annotation = await fetchPhraseAnnotation(trimmed, {

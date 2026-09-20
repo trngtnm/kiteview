@@ -4,6 +4,7 @@ export type {
   PdfViewerHandle,
   FormPageImagePayload,
   PinnedAnnotationView,
+  ActiveMarginAnnotation,
 } from './types';
 export {PdfViewer} from './PdfViewer';
 export {buildPdfViewerHtml} from './pdfViewerHtml';

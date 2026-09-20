@@ -12,11 +12,13 @@ export type RenamePdfFileFn = (
 ) => Promise<PickedPdfFile>;
 export type AnnotatePhraseFn = (
   endpoint: string,
+  accessToken: string,
   anonKey: string,
   phrase: string,
   pageNumber?: number,
   annotationType?: string,
   context?: string,
+  customInstructions?: string,
 ) => Promise<unknown>;
 
 let pickPdfFileImpl: PickPdfFileFn | null = null;
@@ -38,22 +40,26 @@ export function registerAnnotatePhrase(fn: AnnotatePhraseFn): void {
 
 export function annotatePhrase(
   endpoint: string,
+  accessToken: string,
   anonKey: string,
   phrase: string,
   pageNumber?: number,
   annotationType?: string,
   context?: string,
+  customInstructions?: string,
 ): Promise<unknown> {
   if (!annotatePhraseImpl) {
     throw new Error('Native phrase annotation is not registered');
   }
   return annotatePhraseImpl(
     endpoint,
+    accessToken,
     anonKey,
     phrase,
     pageNumber,
     annotationType,
     context,
+    customInstructions,
   );
 }
 

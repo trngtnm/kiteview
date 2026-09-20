@@ -24,9 +24,13 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       width: 100%;
       background: #F5F5F7;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      overflow-x: auto;
+      overflow-x: visible;
       overflow-y: auto;
       scrollbar-gutter: stable;
+    }
+    html[data-scheme="dark"],
+    html[data-scheme="dark"] body {
+      background: #0F1218;
     }
     html { height: 100%; }
     body { min-height: 100%; }
@@ -47,13 +51,22 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       position: relative;
       background: #fff;
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-      max-width: 100%;
+    }
+    /* Visible so pinned margin notes (outside the page box) still show. */
+    .page {
       overflow: visible;
     }
-    .page canvas { display: block; }
+    html[data-scheme="dark"] .page {
+      box-shadow: 0 1px 8px rgba(0,0,0,0.45);
+    }
+    .page canvas {
+      display: block;
+      /* Natural bitmap size; must match page + textLayer CSS pixels. */
+    }
     .textLayer {
       position: absolute;
-      inset: 0;
+      left: 0;
+      top: 0;
       overflow: hidden;
       opacity: 1;
       line-height: 1;
@@ -84,6 +97,8 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       color: transparent;
       border-radius: 2px;
       padding: 0;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
     }
     .pinOverlay {
       position: absolute;
@@ -118,9 +133,24 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       box-sizing: border-box;
       z-index: 5;
     }
-    .pinnedNote.selected {
+    html[data-scheme="dark"] .pinnedNote {
+      background: #1C2433;
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+    }
+    html[data-scheme="dark"] .pinnedNote .pinPhrase {
+      color: #E8EDF5;
+    }
+    html[data-scheme="dark"] .pinnedNote .pinBody {
+      color: #9AA8BC;
+    }
+    .pinnedNote.selected,
+    .pinnedNote.extended {
+      width: 168px;
+      max-width: 42%;
       border-color: rgba(0, 113, 227, 0.55);
       box-shadow: 0 2px 12px rgba(0, 113, 227, 0.18);
+      z-index: 6;
     }
     .pinnedNote .pinPhrase {
       font: 600 11px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -139,6 +169,17 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       -webkit-line-clamp: 4;
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+    /* Full annotation next to the highlight — scrolls with the page. */
+    .pinnedNote.extended .pinPhrase,
+    .pinnedNote.selected .pinPhrase,
+    .pinnedNote.extended .pinBody,
+    .pinnedNote.selected .pinBody {
+      display: block;
+      -webkit-line-clamp: unset;
+      overflow: visible;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .formOverlay {
       position: absolute;
@@ -211,6 +252,7 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     let selectedFieldId = null;
     let pinnedAnnotations = [];
     let selectedPinnedId = null;
+    let activeAnnotation = null;
     const fieldValues = {};
     const pageEls = new Map();
     const pageTextData = new Map();
@@ -256,6 +298,34 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       }
     }
 
+    function isWordChar(ch) {
+      return /[a-zA-Z0-9']/.test(ch);
+    }
+
+    /** Expand a range so it does not start/end mid-word within its text nodes. */
+    function expandRangeToWordBoundaries(range) {
+      const out = range.cloneRange();
+      try {
+        if (out.startContainer.nodeType === Node.TEXT_NODE) {
+          const text = out.startContainer.textContent || '';
+          let s = out.startOffset;
+          while (s > 0 && isWordChar(text[s - 1])) s -= 1;
+          out.setStart(out.startContainer, s);
+        }
+        if (out.endContainer.nodeType === Node.TEXT_NODE) {
+          const text = out.endContainer.textContent || '';
+          let e = out.endOffset;
+          // If the range ended mid-word, include the rest of the word.
+          while (e < text.length && isWordChar(text[e])) e += 1;
+          // If end sits on a boundary right after a partial word, already covered.
+          out.setEnd(out.endContainer, e);
+        }
+      } catch {
+        return range;
+      }
+      return out;
+    }
+
     function wordRangeFromPoint(x, y) {
       let range = null;
       if (document.caretRangeFromPoint) {
@@ -275,7 +345,6 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       const full = textNode.textContent || '';
       let start = range.startOffset;
       let end = range.startOffset;
-      const isWordChar = (ch) => /[a-zA-Z0-9']/.test(ch);
       while (start > 0 && isWordChar(full[start - 1])) start -= 1;
       while (end < full.length && isWordChar(full[end])) end += 1;
       if (start === end) return null;
@@ -353,15 +422,41 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       try {
         if (!selection || selection.rangeCount === 0 || !pageEl) return null;
         const range = selection.getRangeAt(0);
-        const selRect = range.getBoundingClientRect();
         const pageRect = pageEl.getBoundingClientRect();
         const pageW = pageRect.width || pageEl.clientWidth;
         const pageH = pageRect.height || pageEl.clientHeight;
-        if (!pageW || !pageH || !selRect.width || !selRect.height) return null;
-        const x = (selRect.left - pageRect.left) / pageW;
-        const y = (selRect.top - pageRect.top) / pageH;
-        const w = selRect.width / pageW;
-        const h = selRect.height / pageH;
+        if (!pageW || !pageH) return null;
+
+        // Union all client rects so multi-span / multi-line selections are not
+        // clipped to a partial first-line box.
+        const list = range.getClientRects();
+        let left = Infinity;
+        let top = Infinity;
+        let right = -Infinity;
+        let bottom = -Infinity;
+        let any = false;
+        for (let i = 0; i < list.length; i++) {
+          const r = list[i];
+          if (!r.width && !r.height) continue;
+          any = true;
+          left = Math.min(left, r.left);
+          top = Math.min(top, r.top);
+          right = Math.max(right, r.right);
+          bottom = Math.max(bottom, r.bottom);
+        }
+        if (!any) {
+          const selRect = range.getBoundingClientRect();
+          if (!selRect.width || !selRect.height) return null;
+          left = selRect.left;
+          top = selRect.top;
+          right = selRect.right;
+          bottom = selRect.bottom;
+        }
+
+        const x = (left - pageRect.left) / pageW;
+        const y = (top - pageRect.top) / pageH;
+        const w = (right - left) / pageW;
+        const h = (bottom - top) / pageH;
         return {
           x: Math.max(0, Math.min(1, x)),
           y: Math.max(0, Math.min(1, y)),
@@ -378,8 +473,25 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       if (selectionTimer) clearTimeout(selectionTimer);
       selectionTimer = setTimeout(() => {
         const selection = window.getSelection();
-        const phrase = selection ? selection.toString().trim() : '';
-        if (!phrase || phrase.split(/\\s+/).length < 2 || !selection?.anchorNode) {
+        if (!selection || selection.rangeCount === 0 || !selection.anchorNode) {
+          return;
+        }
+        // Snap to whole words so highlights/annotations never cut mid-word.
+        try {
+          const original = selection.getRangeAt(0);
+          const expanded = expandRangeToWordBoundaries(original);
+          const before = original.toString();
+          const after = expanded.toString();
+          if (before !== after) {
+            selection.removeAllRanges();
+            selection.addRange(expanded);
+          }
+        } catch {
+          // keep original selection
+        }
+
+        const phrase = selection.toString().trim();
+        if (!phrase || phrase.split(/\\s+/).filter(Boolean).length < 2) {
           return;
         }
         const page = selection.anchorNode.parentElement?.closest('.page');
@@ -397,6 +509,55 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         }
       }, 80);
     });
+
+    function marginNoteWidth(pageW, extended) {
+      return Math.min(extended ? 168 : 128, pageW * (extended ? 0.4 : 0.32));
+    }
+
+    function placeMarginNote(note, pageW, pageH, r, side, extended) {
+      const noteW = marginNoteWidth(pageW, extended);
+      const topPx = Math.max(4, (r.y || 0) * pageH);
+      note.style.top = topPx + 'px';
+      note.style.width = noteW + 'px';
+      if (side === 'left') {
+        note.style.left = (-noteW - 12) + 'px';
+        note.style.right = 'auto';
+      } else {
+        note.style.left = 'auto';
+        note.style.right = (-noteW - 12) + 'px';
+      }
+    }
+
+    function appendMarginNote(overlay, opts) {
+      const note = document.createElement('div');
+      const extended = Boolean(opts.extended);
+      note.className =
+        'pinnedNote' +
+        (opts.selected ? ' selected' : '') +
+        (extended ? ' extended' : '');
+      if (opts.pinId) note.dataset.pinId = opts.pinId;
+      placeMarginNote(
+        note,
+        opts.pageW,
+        opts.pageH,
+        opts.rectNorm || {},
+        opts.side === 'left' ? 'left' : 'right',
+        extended,
+      );
+      const phraseEl = document.createElement('p');
+      phraseEl.className = 'pinPhrase';
+      phraseEl.textContent = String(opts.phrase || '');
+      const bodyEl = document.createElement('p');
+      bodyEl.className = 'pinBody';
+      bodyEl.textContent = String(opts.body || '');
+      note.appendChild(phraseEl);
+      note.appendChild(bodyEl);
+      if (opts.onMouseDown) {
+        note.addEventListener('mousedown', opts.onMouseDown);
+      }
+      overlay.appendChild(note);
+      return note;
+    }
 
     function paintPinnedAnnotations() {
       pageEls.forEach((pageEl) => {
@@ -433,37 +594,68 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
             });
             overlay.appendChild(hi);
 
-            const note = document.createElement('div');
-            note.className = 'pinnedNote' + (selected ? ' selected' : '');
-            note.dataset.pinId = pin.id;
-            const noteW = Math.min(128, pageW * 0.32);
-            const topPx = Math.max(4, (r.y || 0) * pageH);
-            note.style.top = topPx + 'px';
-            note.style.width = noteW + 'px';
-            if (pin.side === 'left') {
-              note.style.left = (-noteW - 12) + 'px';
-              note.style.right = 'auto';
-            } else {
-              note.style.left = 'auto';
-              note.style.right = (-noteW - 12) + 'px';
-            }
-            const phraseEl = document.createElement('p');
-            phraseEl.className = 'pinPhrase';
-            phraseEl.textContent = String(pin.phrase || '');
-            const bodyEl = document.createElement('p');
-            bodyEl.className = 'pinBody';
-            bodyEl.textContent = String(pin.content || '');
-            note.appendChild(phraseEl);
-            note.appendChild(bodyEl);
-            note.addEventListener('mousedown', (e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              selectedPinnedId = pin.id;
-              schedulePaintPinnedAnnotations();
-              post({ type: 'pinnedAnnotationClick', id: pin.id });
+            appendMarginNote(overlay, {
+              pinId: pin.id,
+              phrase: pin.phrase,
+              body:
+                selected &&
+                activeAnnotation &&
+                activeAnnotation.pinId === pin.id &&
+                activeAnnotation.status === 'ready' &&
+                activeAnnotation.content
+                  ? activeAnnotation.content
+                  : selected &&
+                      activeAnnotation &&
+                      activeAnnotation.pinId === pin.id &&
+                      activeAnnotation.status === 'loading'
+                    ? 'Working…'
+                    : pin.content,
+              rectNorm: r,
+              side: pin.side,
+              selected,
+              extended: selected,
+              pageW,
+              pageH,
+              onMouseDown: (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                selectedPinnedId = pin.id;
+                schedulePaintPinnedAnnotations();
+                post({ type: 'pinnedAnnotationClick', id: pin.id });
+              },
             });
-            overlay.appendChild(note);
           });
+
+        // Live extended annotation beside the selection (before pin / no pin card).
+        const active = activeAnnotation;
+        if (
+          active &&
+          Number(active.pageNumber) === pageNum &&
+          active.rectNorm &&
+          !(
+            selectedPinnedId &&
+            pinnedAnnotations.some((p) => p.id === selectedPinnedId)
+          )
+        ) {
+          let body = '';
+          if (active.status === 'loading') {
+            body = 'Working…';
+          } else if (active.status === 'error') {
+            body = String(active.error || 'Could not annotate.');
+          } else {
+            body = String(active.content || '');
+          }
+          appendMarginNote(overlay, {
+            phrase: active.phrase,
+            body,
+            rectNorm: active.rectNorm,
+            side: active.side,
+            selected: false,
+            extended: true,
+            pageW,
+            pageH,
+          });
+        }
       });
     }
 
@@ -483,8 +675,16 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         }
         overlay.innerHTML = '';
         const pageNum = Number(pageEl.dataset.pageNumber);
-        const pageW = pageEl.clientWidth || pageEl.offsetWidth;
-        const pageH = pageEl.clientHeight || pageEl.offsetHeight;
+        // Page CSS size === canvas bitmap CSS size (no stretch). rectNorm is
+        // relative to that box (pdf.js viewport / AcroForm / vision capture).
+        const pageW =
+          Number(pageEl.dataset.pageWidth) ||
+          pageEl.clientWidth ||
+          pageEl.offsetWidth;
+        const pageH =
+          Number(pageEl.dataset.pageHeight) ||
+          pageEl.clientHeight ||
+          pageEl.offsetHeight;
         if (!pageW || !pageH) return;
 
         formFields
@@ -552,9 +752,7 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     }
 
     function inferFieldType(label) {
-      const lower = (label || '').toLowerCase();
-      if (/sign|signature|initial/.test(lower)) return 'signature';
-      if (/check|agree|opt.?in|\\byes\\b|\\bno\\b/.test(lower)) return 'checkbox';
+      // Text-only detection for now.
       return 'text';
     }
 
@@ -725,19 +923,7 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
             /^[☐□\\[\\s\\]\\(\\)\\.]*$/.test(trimmed) &&
             /[☐□\\[]/.test(trimmed)
           ) {
-            tryPushField(
-              fields,
-              pageNumber,
-              idxRef,
-              'Checkbox ' + (idxRef.n + 1),
-              'checkbox',
-              {
-                x: b.x,
-                y: b.y,
-                w: Math.max(b.w, 0.018),
-                h: Math.max(b.h, 0.016),
-              },
-            );
+            // Text-only detection — skip checkbox glyphs.
             continue;
           }
 
@@ -877,12 +1063,16 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       const pageEl = document.createElement('div');
       pageEl.className = 'page';
       pageEl.dataset.pageNumber = String(pageNum);
+      pageEl.dataset.pageWidth = String(viewport.width);
+      pageEl.dataset.pageHeight = String(viewport.height);
       pageEl.style.width = viewport.width + 'px';
       pageEl.style.height = viewport.height + 'px';
 
       const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      canvas.style.width = viewport.width + 'px';
+      canvas.style.height = viewport.height + 'px';
       pageEl.appendChild(canvas);
 
       await page.render({
@@ -930,7 +1120,15 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     }
 
     function targetPageWidth() {
-      const available = document.documentElement.clientWidth - 8;
+      // #viewer uses large horizontal padding — page width must fit the
+      // content box, not the full document width, or max-width squashing
+      // (historically) / overflow misalignment breaks overlay mapping.
+      const padL = parseFloat(getComputedStyle(viewer).paddingLeft) || 0;
+      const padR = parseFloat(getComputedStyle(viewer).paddingRight) || 0;
+      const available = Math.max(
+        120,
+        (viewer.clientWidth || document.documentElement.clientWidth) - padL - padR,
+      );
       return Math.max(120, Math.min(PAGE_MAX_WIDTH, available));
     }
 
@@ -969,6 +1167,19 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       schedulePaintPinnedAnnotations();
     };
 
+    window.__kvSetActiveAnnotation = function (active) {
+      activeAnnotation =
+        active && typeof active === 'object' && active.rectNorm
+          ? active
+          : null;
+      schedulePaintPinnedAnnotations();
+    };
+
+    window.__kvSetColorScheme = function (scheme) {
+      document.documentElement.dataset.scheme =
+        scheme === 'dark' ? 'dark' : 'light';
+    };
+
     window.__kvSetSelectedField = function (id) {
       selectedFieldId = id || null;
       schedulePaintFormOverlays();
@@ -1002,22 +1213,30 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
           if (!pageEl) continue;
           const canvas = pageEl.querySelector('canvas');
           if (!canvas) continue;
-          const maxW = 720;
+          // Capture from the bitmap (same aspect as viewport / rectNorm space).
+          const srcW = canvas.width;
+          const srcH = canvas.height;
+          if (!srcW || !srcH) continue;
+          const maxW = 960;
+          const scale = Math.min(1, maxW / srcW);
+          const outW = Math.max(1, Math.round(srcW * scale));
+          const outH = Math.max(1, Math.round(srcH * scale));
           let out = canvas;
-          if (canvas.width > maxW) {
-            const scale = maxW / canvas.width;
+          if (outW !== srcW || outH !== srcH) {
             const tmp = document.createElement('canvas');
-            tmp.width = Math.round(canvas.width * scale);
-            tmp.height = Math.round(canvas.height * scale);
-            tmp.getContext('2d').drawImage(canvas, 0, 0, tmp.width, tmp.height);
+            tmp.width = outW;
+            tmp.height = outH;
+            tmp.getContext('2d').drawImage(canvas, 0, 0, outW, outH);
             out = tmp;
           }
-          const dataUrl = out.toDataURL('image/jpeg', 0.55);
+          const dataUrl = out.toDataURL('image/jpeg', 0.65);
           const comma = dataUrl.indexOf(',');
           pages.push({
             pageNumber: n,
             imageBase64: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl,
             mimeType: 'image/jpeg',
+            width: outW,
+            height: outH,
           });
         }
         post({ type: 'formPageImages', pages });

@@ -23,20 +23,18 @@ const config = {
       '@kiteview/core': path.resolve(workspaceRoot, 'packages/core'),
       '@kiteview/ui': path.resolve(workspaceRoot, 'packages/ui'),
       '@kiteview/pdf-engine': path.resolve(workspaceRoot, 'packages/pdf-engine'),
-      '@supabase/supabase-js': path.resolve(
-        workspaceRoot,
-        'node_modules/@supabase/supabase-js',
-      ),
-      '@supabase/auth-js': path.resolve(
-        workspaceRoot,
-        'node_modules/@supabase/auth-js',
-      // Hoisted workspace deps — pin explicit paths so package-local imports resolve
-      // when disableHierarchicalLookup is on.
+      // Hoisted workspace deps — pin explicit paths so package-local imports
+      // resolve when disableHierarchicalLookup is on.
       'pdf-lib': path.resolve(rootNodeModules, 'pdf-lib'),
       '@react-native-async-storage/async-storage': path.resolve(
         rootNodeModules,
         '@react-native-async-storage/async-storage',
       ),
+      '@supabase/supabase-js': path.resolve(
+        rootNodeModules,
+        '@supabase/supabase-js',
+      ),
+      '@supabase/auth-js': path.resolve(rootNodeModules, '@supabase/auth-js'),
     },
   },
 };

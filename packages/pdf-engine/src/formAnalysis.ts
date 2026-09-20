@@ -170,6 +170,10 @@ export async function analyzePdfForms(
     for (const field of fields) {
       const name = field.getName() || `field_${widgetIndex}`;
       const type = mapFieldType(field);
+      // Text-only detection for now — skip checkboxes and other widgets.
+      if (type !== 'text') {
+        continue;
+      }
       let isReadOnly = false;
       try {
         isReadOnly = field.isReadOnly();

@@ -14,6 +14,7 @@ import type {
   PdfViewerHandle,
   PdfViewerProps,
   PinnedAnnotationView,
+  ActiveMarginAnnotation,
 } from './types';
 
 type WebViewHost = {
@@ -83,6 +84,8 @@ export function PdfViewer({
   onPhraseSelect,
   pinnedAnnotations,
   selectedPinnedId,
+  activeMarginAnnotation,
+  colorScheme = 'light',
   onPinnedAnnotationClick,
   formFields,
   selectedFieldId,
@@ -139,19 +142,32 @@ export function PdfViewer({
     );
     const pinId =
       selectedPinnedId == null ? 'null' : JSON.stringify(selectedPinnedId);
+    const activePayload = JSON.stringify(
+      (activeMarginAnnotation ?? null) as ActiveMarginAnnotation | null,
+    );
+    const scheme = colorScheme === 'dark' ? 'dark' : 'light';
     inject(
       webRef,
       `window.__kvSetFormFields && window.__kvSetFormFields(${formPayload});` +
         `window.__kvSetSelectedField && window.__kvSetSelectedField(${formId});` +
         `window.__kvSetPinnedAnnotations && window.__kvSetPinnedAnnotations(${pinsPayload});` +
-        `window.__kvSetSelectedPinnedId && window.__kvSetSelectedPinnedId(${pinId})`,
+        `window.__kvSetSelectedPinnedId && window.__kvSetSelectedPinnedId(${pinId});` +
+        `window.__kvSetActiveAnnotation && window.__kvSetActiveAnnotation(${activePayload});` +
+        `window.__kvSetColorScheme && window.__kvSetColorScheme(${JSON.stringify(scheme)})`,
     );
-  }, [formFields, selectedFieldId, pinnedAnnotations, selectedPinnedId]);
+  }, [
+    formFields,
+    selectedFieldId,
+    pinnedAnnotations,
+    selectedPinnedId,
+    activeMarginAnnotation,
+    colorScheme,
+  ]);
 
   useEffect(() => {
     if (!html) return;
     pushOverlayState();
-  }, [html, pushOverlayState]);
+  }, [html, pushOverlayState, colorScheme]);
 
   if (!html) {
     return (
@@ -164,7 +180,11 @@ export function PdfViewer({
   }
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {backgroundColor: colorScheme === 'dark' ? '#0F1218' : '#F5F5F7'},
+      ]}>
       <RNWebView
         ref={webRef}
         originWhitelist={['*']}
