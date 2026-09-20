@@ -26,6 +26,9 @@ type SidebarRailProps = {
   formsDetectLabel?: string;
   formsDetectDisabled?: boolean;
   formFieldCount?: number;
+  onDownloadFilledPdf?: () => void;
+  downloadFilledDisabled?: boolean;
+  downloadFilledLabel?: string;
   accountLabel?: string;
   onOpenAccount?: () => void;
   onOpenPreferences?: () => void;
@@ -47,6 +50,9 @@ export function SidebarRail({
   formsDetectLabel = 'Find form fields',
   formsDetectDisabled,
   formFieldCount,
+  onDownloadFilledPdf,
+  downloadFilledDisabled,
+  downloadFilledLabel = 'Download PDF',
   accountLabel = 'Guest',
   onOpenAccount,
   onOpenPreferences,
@@ -145,6 +151,19 @@ export function SidebarRail({
               <Text style={styles.formsMeta}>
                 {formFieldCount} field{formFieldCount === 1 ? '' : 's'} found
               </Text>
+            ) : null}
+            {onDownloadFilledPdf ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={downloadFilledDisabled}
+                onPress={onDownloadFilledPdf}
+                style={[
+                  styles.detectButton,
+                  styles.downloadButton,
+                  downloadFilledDisabled && styles.detectDisabled,
+                ]}>
+                <Text style={styles.downloadLabel}>{downloadFilledLabel}</Text>
+              </Pressable>
             ) : null}
           </View>
         ) : null}
@@ -322,6 +341,11 @@ function createStyles(theme: Theme) {
       alignItems: 'center',
       overflow: 'hidden',
     },
+    downloadButton: {
+      marginTop: 8,
+      backgroundColor: theme.chipBg,
+      borderColor: theme.inputBorder,
+    },
     detectDisabled: {
       opacity: 0.45,
     },
@@ -334,6 +358,11 @@ function createStyles(theme: Theme) {
     },
     detectLabel: {
       color: theme.accentText,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    downloadLabel: {
+      color: theme.textPrimary,
       fontSize: 13,
       fontWeight: '600',
     },

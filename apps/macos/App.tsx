@@ -9,6 +9,7 @@ import {
   pickPdfFile,
   preloadFormAnalysis,
   renamePdfFile,
+  savePdfBytes,
   useAnnotationStore,
   useAppearanceStore,
   useAuthStore,
@@ -100,6 +101,7 @@ function App() {
 
   const formStatus = useFormAnalysisStore(s => s.status);
   const formFields = useFormAnalysisStore(s => s.fields);
+  const fieldValues = useFormAnalysisStore(s => s.fieldValues);
   const selectedFieldId = useFormAnalysisStore(s => s.selectedFieldId);
   const formError = useFormAnalysisStore(s => s.error);
   const cascadeStage = useFormAnalysisStore(s => s.cascadeStage);
@@ -112,6 +114,7 @@ function App() {
   const selectFormField = useFormAnalysisStore(s => s.selectField);
   const setFieldValue = useFormAnalysisStore(s => s.setFieldValue);
   const clearFormAnalysis = useFormAnalysisStore(s => s.clear);
+  const [downloadBusy, setDownloadBusy] = useState(false);
 
   const authUser = useAuthStore(s => s.user);
   const authPending = useAuthStore(s => s.pending);
@@ -160,6 +163,13 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Form overlays/panel are per-document; clear on every PDF/tab switch.
+    clearFormAnalysis();
+    page1ReadyRef.current = false;
+    acroformStartedRef.current = false;
+    heuristicStartedRef.current = false;
+    visionStartedRef.current = false;
+
     if (!documentKey) {
       clearPinnedDocument();
       return;
@@ -168,7 +178,12 @@ function App() {
       preloadFormAnalysis();
     }
     void loadPinnedForDocument(documentKey);
-  }, [documentKey, loadPinnedForDocument, clearPinnedDocument]);
+  }, [
+    documentKey,
+    loadPinnedForDocument,
+    clearPinnedDocument,
+    clearFormAnalysis,
+  ]);
 
   const cascadeBusy =
     FORMS_ENABLED &&
@@ -276,6 +291,46 @@ function App() {
     }
   }, [file, startDetect]);
 
+  const onDownloadFilledPdf = useCallback(async () => {
+    if (!FORMS_ENABLED || !file) return;
+    const hasValues = Object.values(fieldValues).some(v => String(v).trim());
+    if (!hasValues) {
+      Alert.alert(
+        'Nothing to download',
+        'Type into at least one form field before downloading.',
+      );
+      return;
+    }
+    if (formFields.length === 0) {
+      Alert.alert(
+        'No form fields',
+        'Find form fields first, then fill them in.',
+      );
+      return;
+    }
+    setDownloadBusy(true);
+    try {
+      const pages = await pdfRef.current?.exportFilledPages(fieldValues);
+      if (!pages || pages.length === 0) {
+        throw new Error('Could not capture filled pages');
+      }
+      const {exportFilledPdfFromPageImages} = await import(
+        '@kiteview/pdf-engine/src/exportFilledPdf'
+      );
+      const {base64} = await exportFilledPdfFromPageImages(pages);
+      const baseName = (file.name || 'document').replace(/\.pdf$/i, '');
+      const saved = await savePdfBytes(base64, `${baseName}-filled.pdf`);
+      if (saved) {
+        Alert.alert('Saved', `Filled PDF saved as ${saved.name}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      Alert.alert('Download failed', message);
+    } finally {
+      setDownloadBusy(false);
+    }
+  }, [file, fieldValues, formFields.length]);
+
   const onSelectTab = useCallback(
     (id: string) => {
       resetPanels();
@@ -315,6 +370,51 @@ function App() {
     [requestDefinition],
   );
 
+  const commentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const pendingCommentRef = useRef<{pinId: string; comment: string} | null>(
+    null,
+  );
+
+  const flushPendingComment = useCallback(() => {
+    if (commentSaveTimerRef.current) {
+      clearTimeout(commentSaveTimerRef.current);
+      commentSaveTimerRef.current = null;
+    }
+    const pending = pendingCommentRef.current;
+    if (!pending) return;
+    pendingCommentRef.current = null;
+    void updatePinComment(pending.pinId, pending.comment);
+  }, [updatePinComment]);
+
+  const onUserCommentChange = useCallback(
+    (comment: string) => {
+      setUserComment(comment);
+      const pinId = useAnnotationStore.getState().viewingPinnedId;
+      if (!pinId) return;
+      pendingCommentRef.current = {pinId, comment};
+      if (commentSaveTimerRef.current) {
+        clearTimeout(commentSaveTimerRef.current);
+      }
+      commentSaveTimerRef.current = setTimeout(() => {
+        commentSaveTimerRef.current = null;
+        const pending = pendingCommentRef.current;
+        pendingCommentRef.current = null;
+        if (pending) {
+          void updatePinComment(pending.pinId, pending.comment);
+        }
+      }, 350);
+    },
+    [setUserComment, updatePinComment],
+  );
+
+  useEffect(() => {
+    return () => {
+      flushPendingComment();
+    };
+  }, [flushPendingComment]);
+
   const onPhraseSelect = useCallback(
     (
       phrase: string,
@@ -322,6 +422,7 @@ function App() {
       context?: string,
       rectNorm?: RectNorm,
     ) => {
+      flushPendingComment();
       clearPinnedActive();
       void requestAnnotation(
         phrase,
@@ -331,19 +432,55 @@ function App() {
         rectNorm,
       );
     },
-    [clearPinnedActive, requestAnnotation],
+    [clearPinnedActive, flushPendingComment, requestAnnotation],
   );
 
   const onPinnedAnnotationClick = useCallback(
-    (id: string) => {
+    (id: string, source: 'highlight' | 'note' = 'highlight') => {
+      flushPendingComment();
       const pin = usePinnedAnnotationStore
         .getState()
         .pins.find(p => p.id === id);
       if (!pin) return;
+
+      const viewingId = useAnnotationStore.getState().viewingPinnedId;
+      const selectedId = usePinnedAnnotationStore.getState().selectedId;
+
+      if (source === 'note') {
+        // 1st click: expand small note only
+        // 2nd click: open large gutter panel
+        // 3rd click: dismiss both
+        if (viewingId === id) {
+          clearAnnotation();
+          clearPinnedActive();
+          return;
+        }
+        if (selectedId === id) {
+          selectPinned(id);
+          showPinnedAnnotation(pin);
+          return;
+        }
+        clearAnnotation();
+        selectPinned(id);
+        return;
+      }
+
+      // Highlight click: open/toggle the large panel immediately.
+      if (viewingId === id) {
+        clearAnnotation();
+        clearPinnedActive();
+        return;
+      }
       selectPinned(id);
       showPinnedAnnotation(pin);
     },
-    [selectPinned, showPinnedAnnotation],
+    [
+      clearAnnotation,
+      clearPinnedActive,
+      flushPendingComment,
+      selectPinned,
+      showPinnedAnnotation,
+    ],
   );
 
   const onPin = useCallback(async () => {
@@ -380,24 +517,17 @@ function App() {
   ]);
 
   const onUnpin = useCallback(async () => {
+    flushPendingComment();
     if (!viewingPinnedId) return;
     await unpinAnnotation(viewingPinnedId);
     clearAnnotation();
-  }, [clearAnnotation, unpinAnnotation, viewingPinnedId]);
-
-  const onSaveComment = useCallback(async () => {
-    if (!viewingPinnedId) return;
-    const comment = useAnnotationStore.getState().userComment;
-    const ok = await updatePinComment(viewingPinnedId, comment);
-    if (!ok) {
-      Alert.alert('Could not save comment', 'Try again in a moment.');
-    }
-  }, [updatePinComment, viewingPinnedId]);
+  }, [clearAnnotation, flushPendingComment, unpinAnnotation, viewingPinnedId]);
 
   const onCloseAnnotation = useCallback(() => {
+    flushPendingComment();
     clearAnnotation();
     clearPinnedActive();
-  }, [clearAnnotation, clearPinnedActive]);
+  }, [clearAnnotation, clearPinnedActive, flushPendingComment]);
 
   const onPageReady = useCallback(
     (pageNumber: number) => {
@@ -544,6 +674,15 @@ function App() {
       formsDetectLabel={formsDetectLabel}
       formsDetectDisabled={cascadeBusy}
       formFieldCount={showFormOverlays ? formFields.length : undefined}
+      onDownloadFilledPdf={
+        FORMS_ENABLED && file && formFields.length > 0
+          ? () => {
+              void onDownloadFilledPdf();
+            }
+          : undefined
+      }
+      downloadFilledDisabled={downloadBusy || cascadeBusy}
+      downloadFilledLabel={downloadBusy ? 'Downloading…' : 'Download PDF'}
       onRenameFile={renameFile}
       onSaveFile={onSaveFile}
       accountLabel={accountLabel}
@@ -610,7 +749,7 @@ function App() {
       }
       leftGutter={
         <ScrollView
-          style={{flex: 1}}
+          style={{flex: 1, backgroundColor: 'transparent'}}
           contentContainerStyle={{paddingBottom: 24}}
           showsVerticalScrollIndicator={false}>
           <DefinitionPanel
@@ -626,18 +765,12 @@ function App() {
             status={annotationStatus}
             annotation={annotation}
             error={annotationError}
+            pageNumber={annotationPageNumber}
             userComment={userComment}
             pinned={Boolean(viewingPinnedId)}
             canPin={canPin}
             onModeChange={setAnnotationMode}
-            onUserCommentChange={setUserComment}
-            onSaveComment={
-              viewingPinnedId
-                ? () => {
-                    void onSaveComment();
-                  }
-                : undefined
-            }
+            onUserCommentChange={onUserCommentChange}
             onPin={() => {
               void onPin();
             }}

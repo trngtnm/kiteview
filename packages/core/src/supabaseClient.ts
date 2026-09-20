@@ -144,14 +144,13 @@ function normalizeField(
   const h = clamp01(Number(rect.h));
   if (w <= 0.005 || h <= 0.005) return null;
 
-  const allowed: FormFieldType[] = ['text', 'unknown'];
+  const allowed: FormFieldType[] = ['text', 'date', 'signature', 'unknown'];
   let type = allowed.includes(raw.type) ? raw.type : 'text';
-  // Text-only detection — drop checkbox/radio/signature/dropdown from vision.
+  // Drop checkbox/radio/dropdown from vision; keep date/signature/text.
   if (
     raw.type === 'checkbox' ||
     raw.type === 'radio' ||
-    raw.type === 'dropdown' ||
-    raw.type === 'signature'
+    raw.type === 'dropdown'
   ) {
     return null;
   }

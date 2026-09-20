@@ -221,4 +221,60 @@ RCT_EXPORT_METHOD(annotatePhrase:(NSString *)endpoint
   }] resume];
 }
 
+RCT_EXPORT_METHOD(savePdfBytes:(NSString *)base64
+                  suggestedName:(NSString *)suggestedName
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+  RCTExecuteOnMainQueue(^{
+    if (base64.length == 0) {
+      reject(@"invalid_data", @"PDF data is empty", nil);
+      return;
+    }
+    NSData *data = [[NSData alloc] initWithBase64EncodedString:base64 options:0];
+    if (data == nil || data.length == 0) {
+      reject(@"invalid_data", @"Could not decode PDF data", nil);
+      return;
+    }
+
+    NSString *safeName = [suggestedName lastPathComponent];
+    if (safeName.length == 0 || [safeName isEqualToString:@"."]) {
+      safeName = @"document-filled.pdf";
+    }
+    if (![[safeName pathExtension].lowercaseString isEqualToString:@"pdf"]) {
+      safeName = [safeName stringByAppendingPathExtension:@"pdf"];
+    }
+
+    NSSavePanel *panel = [NSSavePanel savePanel];
+    panel.allowedContentTypes = @[ UTTypePDF ];
+    panel.canCreateDirectories = YES;
+    panel.nameFieldStringValue = safeName;
+    panel.message = @"Save filled PDF";
+    panel.prompt = @"Save";
+
+    NSModalResponse response = [panel runModal];
+    if (response != NSModalResponseOK || panel.URL == nil) {
+      resolve([NSNull null]);
+      return;
+    }
+
+    NSURL *url = panel.URL;
+    BOOL accessed = [url startAccessingSecurityScopedResource];
+    NSError *writeError = nil;
+    BOOL wrote = [data writeToURL:url options:NSDataWritingAtomic error:&writeError];
+    if (accessed) {
+      [url stopAccessingSecurityScopedResource];
+    }
+    if (!wrote) {
+      reject(@"write_failed", writeError.localizedDescription ?: @"Could not save PDF", writeError);
+      return;
+    }
+
+    resolve(@{
+      @"uri": url.absoluteString ?: @"",
+      @"name": url.lastPathComponent ?: safeName,
+    });
+  });
+}
+
 @end

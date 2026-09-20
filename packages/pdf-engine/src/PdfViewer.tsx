@@ -96,6 +96,13 @@ export function PdfViewer({
   onFormPageImages,
 }: PdfViewerProps) {
   const webRef = useRef<WebViewHost | null>(null);
+  const colorSchemeRef = useRef(colorScheme);
+  colorSchemeRef.current = colorScheme;
+  const exportWaiterRef = useRef<{
+    resolve: (pages: FormPageImagePayload[]) => void;
+    reject: (err: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
 
   const dataUri = useMemo(() => {
     if (base64) {
@@ -107,8 +114,11 @@ export function PdfViewer({
     return null;
   }, [base64, sourceUri]);
 
+  // Rebuild HTML only when the PDF changes. Bake the current scheme into the
+  // document so the first paint is not a light flash; scheme toggles inject.
   const html = useMemo(
-    () => (dataUri ? buildPdfViewerHtml(dataUri) : null),
+    () =>
+      dataUri ? buildPdfViewerHtml(dataUri, colorSchemeRef.current) : null,
     [dataUri],
   );
 
@@ -131,6 +141,28 @@ export function PdfViewer({
         `window.__kvCapturePagesForDetect && window.__kvCapturePagesForDetect(${Number(maxPages) || 1})`,
       );
     },
+    exportFilledPages: values =>
+      new Promise<FormPageImagePayload[]>((resolve, reject) => {
+        if (exportWaiterRef.current) {
+          clearTimeout(exportWaiterRef.current.timer);
+          exportWaiterRef.current.reject(
+            new Error('Export superseded by a newer request'),
+          );
+        }
+        const timer = setTimeout(() => {
+          if (exportWaiterRef.current) {
+            exportWaiterRef.current = null;
+            reject(new Error('Export timed out'));
+          }
+        }, 60000);
+        exportWaiterRef.current = {resolve, reject, timer};
+        const payload = JSON.stringify(values ?? {});
+        inject(
+          webRef,
+          `window.__kvSetFieldValues && window.__kvSetFieldValues(${payload});` +
+            `window.__kvExportFilledPages && window.__kvExportFilledPages()`,
+        );
+      }),
   }));
 
   const pushOverlayState = useCallback(() => {
@@ -176,9 +208,20 @@ export function PdfViewer({
     pushOverlayState();
   }, [html, pushOverlayState, colorScheme]);
 
+  useEffect(() => {
+    return () => {
+      if (exportWaiterRef.current) {
+        clearTimeout(exportWaiterRef.current.timer);
+        exportWaiterRef.current = null;
+      }
+    };
+  }, []);
+
+  const stageBg = colorScheme === 'dark' ? '#0F1218' : '#F5F5F7';
+
   if (!html) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, {backgroundColor: stageBg}]}>
         <Text style={styles.error}>
           PDF data is unavailable. Re-open the file with Select file.
         </Text>
@@ -187,16 +230,12 @@ export function PdfViewer({
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        {backgroundColor: colorScheme === 'dark' ? '#0F1218' : '#F5F5F7'},
-      ]}>
+    <View style={[styles.container, {backgroundColor: stageBg}]}>
       <RNWebView
         ref={webRef}
         originWhitelist={['*']}
         source={{html, baseUrl: 'https://localhost/'}}
-        style={styles.webview}
+        style={[styles.webview, {backgroundColor: stageBg}]}
         mixedContentMode="always"
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator
@@ -240,7 +279,11 @@ export function PdfViewer({
               data.type === 'pinnedAnnotationClick' &&
               typeof data.id === 'string'
             ) {
-              onPinnedAnnotationClick?.(data.id);
+              const source =
+                data.source === 'note' || data.source === 'highlight'
+                  ? data.source
+                  : 'highlight';
+              onPinnedAnnotationClick?.(data.id, source);
             }
             if (data.type === 'formFieldClick' && typeof data.id === 'string') {
               onFormFieldClick?.(data.id);
@@ -260,6 +303,18 @@ export function PdfViewer({
             }
             if (data.type === 'formPageImages' && Array.isArray(data.pages)) {
               onFormPageImages?.(data.pages);
+            }
+            if (data.type === 'filledPageImages' && Array.isArray(data.pages)) {
+              const waiter = exportWaiterRef.current;
+              if (waiter) {
+                clearTimeout(waiter.timer);
+                exportWaiterRef.current = null;
+                if (data.message && data.pages.length === 0) {
+                  waiter.reject(new Error(data.message));
+                } else {
+                  waiter.resolve(data.pages);
+                }
+              }
             }
           } catch {
             // ignore malformed messages

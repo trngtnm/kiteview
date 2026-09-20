@@ -40,6 +40,9 @@ type ReaderShellProps = {
   formsDetectLabel?: string;
   formsDetectDisabled?: boolean;
   formFieldCount?: number;
+  onDownloadFilledPdf?: () => void;
+  downloadFilledDisabled?: boolean;
+  downloadFilledLabel?: string;
   accountLabel?: string;
   onOpenAccount?: () => void;
   onOpenPreferences?: () => void;
@@ -74,6 +77,9 @@ export function ReaderShell({
   formsDetectLabel,
   formsDetectDisabled,
   formFieldCount,
+  onDownloadFilledPdf,
+  downloadFilledDisabled,
+  downloadFilledLabel,
   accountLabel,
   onOpenAccount,
   onOpenPreferences,
@@ -245,6 +251,9 @@ export function ReaderShell({
           formsDetectLabel={formsDetectLabel}
           formsDetectDisabled={formsDetectDisabled}
           formFieldCount={formFieldCount}
+          onDownloadFilledPdf={onDownloadFilledPdf}
+          downloadFilledDisabled={downloadFilledDisabled}
+          downloadFilledLabel={downloadFilledLabel}
           accountLabel={accountLabel}
           onOpenAccount={onOpenAccount}
           onOpenPreferences={onOpenPreferences}

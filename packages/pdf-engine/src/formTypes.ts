@@ -1,5 +1,6 @@
 export type FormFieldType =
   | 'text'
+  | 'date'
   | 'checkbox'
   | 'radio'
   | 'dropdown'

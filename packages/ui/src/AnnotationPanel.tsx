@@ -12,8 +12,7 @@ import type {
   AnnotationStatus,
   PhraseAnnotation,
 } from '@kiteview/core';
-import {useTheme} from './ThemeProvider';
-import type {Theme} from './theme';
+import {FrostedPanel, frostedPanelChrome as chrome} from './FrostedPanel';
 
 type AnnotationPanelProps = {
   phrase: string | null;
@@ -21,12 +20,12 @@ type AnnotationPanelProps = {
   status: AnnotationStatus;
   annotation: PhraseAnnotation | null;
   error: string | null;
+  pageNumber?: number | null;
   userComment?: string;
   pinned?: boolean;
   canPin?: boolean;
   onModeChange: (mode: AnnotationMode) => void;
   onUserCommentChange: (comment: string) => void;
-  onSaveComment?: () => void;
   onPin?: () => void;
   onUnpin?: () => void;
   onClose: () => void;
@@ -38,30 +37,35 @@ export function AnnotationPanel({
   status,
   annotation,
   error,
+  pageNumber,
   userComment = '',
   pinned = false,
   canPin = false,
   onModeChange,
   onUserCommentChange,
-  onSaveComment,
   onPin,
   onUnpin,
   onClose,
 }: AnnotationPanelProps) {
-  const theme = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const styles = useMemo(() => createStyles(), []);
   const [draft, setDraft] = useState(userComment);
-  const [commentDirty, setCommentDirty] = useState(false);
   const draftRef = useRef(userComment);
 
   useEffect(() => {
     setDraft(userComment);
     draftRef.current = userComment;
-    setCommentDirty(false);
   }, [userComment, phrase]);
 
   if (!phrase || status === 'idle') return null;
 
+  const page = pageNumber && pageNumber > 0 ? pageNumber : 1;
+  const modeLabel =
+    mode === 'summarize'
+      ? 'Summary'
+      : mode === 'explain'
+        ? 'Explanation'
+        : 'Annotation';
+  const title = `${modeLabel} on page ${page}`;
   const loadingLabel =
     mode === 'summarize' ? 'Summarizing…' : 'Explaining in plain language…';
   const showComment = status === 'ready' || status === 'error';
@@ -69,17 +73,21 @@ export function AnnotationPanel({
   const commitDraft = (text: string) => {
     draftRef.current = text;
     setDraft(text);
-    setCommentDirty(text !== userComment);
     onUserCommentChange(text);
   };
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.card} accessibilityLabel={`Annotation of ${phrase}`}>
+      <FrostedPanel accessibilityLabel={title} style={styles.card}>
         <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={2}>
-            {phrase}
-          </Text>
+          <View style={styles.titleBlock}>
+            <Text style={styles.title} numberOfLines={2}>
+              {title}
+            </Text>
+            <Text style={styles.phrase} numberOfLines={3}>
+              {phrase}
+            </Text>
+          </View>
           <View style={styles.headerActions}>
             {status === 'ready' && pinned && onUnpin ? (
               <Pressable
@@ -128,7 +136,7 @@ export function AnnotationPanel({
 
         {status === 'loading' ? (
           <View style={styles.loading}>
-            <ActivityIndicator color={theme.accent} />
+            <ActivityIndicator color={chrome.accent} />
             <Text style={styles.meta}>{loadingLabel}</Text>
           </View>
         ) : null}
@@ -153,27 +161,13 @@ export function AnnotationPanel({
                 commitDraft(event.nativeEvent?.text ?? draftRef.current)
               }
               placeholder="Add your own notes about this selection…"
-              placeholderTextColor={theme.textSecondary}
+              placeholderTextColor={chrome.textSecondary}
               style={styles.commentInput}
               value={draft}
               textAlignVertical="top"
             />
-            {pinned && onSaveComment ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={!commentDirty}
-                onPress={() => {
-                  onSaveComment();
-                  setCommentDirty(false);
-                }}
-                style={[
-                  styles.saveCommentBtn,
-                  !commentDirty && styles.saveCommentDisabled,
-                ]}>
-                <Text style={styles.saveCommentLabel}>
-                  {commentDirty ? 'Save comment' : 'Comment saved'}
-                </Text>
-              </Pressable>
+            {pinned ? (
+              <Text style={styles.commentHint}>Saved with this pin.</Text>
             ) : (
               <Text style={styles.commentHint}>
                 Pin this annotation to keep your comment with the highlight.
@@ -181,7 +175,7 @@ export function AnnotationPanel({
             )}
           </View>
         ) : null}
-      </View>
+      </FrostedPanel>
     </View>
   );
 }
@@ -210,7 +204,7 @@ function ModeChip({
   );
 }
 
-function createStyles(theme: Theme) {
+function createStyles() {
   return StyleSheet.create({
     wrapper: {
       alignSelf: 'stretch',
@@ -223,11 +217,12 @@ function createStyles(theme: Theme) {
       maxWidth: 320,
       padding: 14,
       borderRadius: 12,
-      backgroundColor: theme.pageSurface,
-      shadowColor: theme.shadow,
-      shadowOpacity: 0.1,
-      shadowRadius: 12,
-      shadowOffset: {width: 0, height: 2},
+      borderWidth: 2,
+      borderColor: chrome.border,
+      shadowColor: chrome.shadow,
+      shadowOpacity: 0.32,
+      shadowRadius: 16,
+      shadowOffset: {width: 0, height: 4},
     },
     header: {
       flexDirection: 'row',
@@ -240,28 +235,37 @@ function createStyles(theme: Theme) {
       alignItems: 'center',
       gap: 6,
     },
-    title: {
+    titleBlock: {
       flex: 1,
-      color: theme.textPrimary,
+      gap: 4,
+      minWidth: 0,
+    },
+    title: {
+      color: chrome.textPrimary,
       fontSize: 17,
       fontWeight: '700',
+    },
+    phrase: {
+      color: chrome.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
     },
     pinBtn: {
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 8,
-      backgroundColor: theme.chipBg,
+      backgroundColor: chrome.chipBg,
     },
     pinBtnPrimary: {
-      backgroundColor: theme.accent,
+      backgroundColor: chrome.accent,
     },
     pinBtnLabel: {
-      color: theme.textSecondary,
+      color: chrome.textSecondary,
       fontSize: 12,
       fontWeight: '700',
     },
     pinBtnLabelPrimary: {
-      color: theme.accentText,
+      color: chrome.accentText,
     },
     close: {
       width: 28,
@@ -269,9 +273,9 @@ function createStyles(theme: Theme) {
       borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.chipBg,
+      backgroundColor: chrome.chipBg,
     },
-    closeLabel: {color: theme.textSecondary, fontSize: 13, fontWeight: '600'},
+    closeLabel: {color: chrome.textSecondary, fontSize: 13, fontWeight: '600'},
     modeRow: {
       flexDirection: 'row',
       gap: 8,
@@ -281,36 +285,36 @@ function createStyles(theme: Theme) {
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 8,
-      backgroundColor: theme.chipBg,
+      backgroundColor: chrome.chipBg,
     },
     chipActive: {
-      backgroundColor: theme.chipBgActive,
+      backgroundColor: chrome.chipBgActive,
     },
     chipLabel: {
-      color: theme.chipText,
+      color: chrome.chipText,
       fontSize: 13,
       fontWeight: '600',
     },
     chipLabelActive: {
-      color: theme.chipTextActive,
+      color: chrome.chipTextActive,
     },
     loading: {marginTop: 16, alignItems: 'center', gap: 8},
-    meta: {color: theme.textSecondary, fontSize: 13},
+    meta: {color: chrome.textSecondary, fontSize: 13},
     content: {
       marginTop: 14,
-      color: theme.textPrimary,
+      color: chrome.textPrimary,
       fontSize: 14,
       lineHeight: 21,
     },
-    error: {marginTop: 12, color: theme.danger, fontSize: 14, lineHeight: 20},
+    error: {marginTop: 12, color: chrome.danger, fontSize: 14, lineHeight: 20},
     commentBlock: {
       marginTop: 16,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.inputBorder,
+      borderTopColor: chrome.inputBorder,
       paddingTop: 12,
     },
     commentLabel: {
-      color: theme.textSecondary,
+      color: chrome.textSecondary,
       fontSize: 12,
       fontWeight: '700',
       textTransform: 'uppercase',
@@ -321,36 +325,20 @@ function createStyles(theme: Theme) {
       minHeight: 72,
       maxHeight: 140,
       borderWidth: 1,
-      borderColor: theme.inputBorder,
+      borderColor: chrome.inputBorder,
       borderRadius: 8,
       paddingHorizontal: 10,
       paddingVertical: 8,
       fontSize: 13,
       lineHeight: 18,
-      color: theme.textPrimary,
-      backgroundColor: theme.inputBg,
+      color: chrome.textPrimary,
+      backgroundColor: chrome.inputBg,
     },
     commentHint: {
       marginTop: 8,
-      color: theme.textSecondary,
+      color: chrome.textSecondary,
       fontSize: 12,
       lineHeight: 16,
-    },
-    saveCommentBtn: {
-      marginTop: 8,
-      alignSelf: 'flex-start',
-      backgroundColor: theme.accent,
-      borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-    },
-    saveCommentDisabled: {
-      opacity: 0.45,
-    },
-    saveCommentLabel: {
-      color: theme.accentText,
-      fontSize: 12,
-      fontWeight: '700',
     },
   });
 }

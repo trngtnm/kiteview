@@ -3,12 +3,18 @@ import {
   registerPickPdfFile,
   registerAnnotatePhrase,
   registerRenamePdfFile,
+  registerSavePdfBytes,
   type PickedPdfFile,
+  type SavedPdfFile,
 } from '@kiteview/core';
 
 type NativePicker = {
   pickPdf: () => Promise<PickedPdfFile | null>;
   renamePdf: (uri: string, name: string) => Promise<PickedPdfFile>;
+  savePdfBytes: (
+    base64: string,
+    suggestedName: string,
+  ) => Promise<SavedPdfFile | null>;
   annotatePhrase: (
     endpoint: string,
     accessToken: string,
@@ -45,6 +51,19 @@ export function registerMacosPdfPicker(): void {
       throw new Error('KiteViewFilePicker native rename is not linked');
     }
     return KiteViewFilePicker.renamePdf(uri, name);
+  });
+  registerSavePdfBytes(async (base64, suggestedName) => {
+    if (!KiteViewFilePicker?.savePdfBytes) {
+      throw new Error('KiteViewFilePicker native save is not linked');
+    }
+    const result = await KiteViewFilePicker.savePdfBytes(
+      base64,
+      suggestedName,
+    );
+    if (!result) {
+      return null;
+    }
+    return {uri: result.uri, name: result.name};
   });
   registerAnnotatePhrase(
     (

@@ -34,6 +34,12 @@ export type PdfViewerHandle = {
   runHeuristicDetect: () => void;
   runAcroformDetect: () => void;
   capturePagesForDetect: (maxPages?: number) => void;
+  /**
+   * Push field values into the WebView and return page JPEGs with text burned in.
+   */
+  exportFilledPages: (
+    values: Record<string, string>,
+  ) => Promise<FormPageImagePayload[]>;
 };
 
 export type PdfViewerProps = {
@@ -56,7 +62,10 @@ export type PdfViewerProps = {
   selectedPinnedId?: string | null;
   activeMarginAnnotation?: ActiveMarginAnnotation | null;
   colorScheme?: 'light' | 'dark';
-  onPinnedAnnotationClick?: (id: string) => void;
+  onPinnedAnnotationClick?: (
+    id: string,
+    source?: 'highlight' | 'note',
+  ) => void;
   formFields?: DetectedFormField[];
   selectedFieldId?: string | null;
   onFormFieldClick?: (id: string) => void;

@@ -5,11 +5,20 @@ export type PickedPdfFile = {
   base64?: string;
 };
 
+export type SavedPdfFile = {
+  uri: string;
+  name: string;
+};
+
 export type PickPdfFileFn = () => Promise<PickedPdfFile | null>;
 export type RenamePdfFileFn = (
   uri: string,
   name: string,
 ) => Promise<PickedPdfFile>;
+export type SavePdfBytesFn = (
+  base64: string,
+  suggestedName: string,
+) => Promise<SavedPdfFile | null>;
 export type AnnotatePhraseFn = (
   endpoint: string,
   accessToken: string,
@@ -23,6 +32,7 @@ export type AnnotatePhraseFn = (
 
 let pickPdfFileImpl: PickPdfFileFn | null = null;
 let renamePdfFileImpl: RenamePdfFileFn | null = null;
+let savePdfBytesImpl: SavePdfBytesFn | null = null;
 let annotatePhraseImpl: AnnotatePhraseFn | null = null;
 
 /** Register the platform-specific PDF picker (e.g. NSOpenPanel on macOS). */
@@ -32,6 +42,10 @@ export function registerPickPdfFile(fn: PickPdfFileFn): void {
 
 export function registerRenamePdfFile(fn: RenamePdfFileFn): void {
   renamePdfFileImpl = fn;
+}
+
+export function registerSavePdfBytes(fn: SavePdfBytesFn): void {
+  savePdfBytesImpl = fn;
 }
 
 export function registerAnnotatePhrase(fn: AnnotatePhraseFn): void {
@@ -82,4 +96,16 @@ export async function renamePdfFile(
     );
   }
   return renamePdfFileImpl(uri, name);
+}
+
+export async function savePdfBytes(
+  base64: string,
+  suggestedName: string,
+): Promise<SavedPdfFile | null> {
+  if (!savePdfBytesImpl) {
+    throw new Error(
+      'savePdfBytes is not registered. Call registerSavePdfBytes at app startup.',
+    );
+  }
+  return savePdfBytesImpl(base64, suggestedName);
 }

@@ -8,8 +8,7 @@ import {
   View,
 } from 'react-native';
 import type {DefinitionStatus, WordDefinition} from '@kiteview/core';
-import {useTheme} from './ThemeProvider';
-import type {Theme} from './theme';
+import {FrostedPanel, frostedPanelChrome as chrome} from './FrostedPanel';
 
 type DefinitionPanelProps = {
   word: string | null;
@@ -28,8 +27,7 @@ export function DefinitionPanel({
   error,
   onClose,
 }: DefinitionPanelProps) {
-  const theme = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const styles = useMemo(() => createStyles(), []);
 
   if (!word || status === 'idle') {
     return null;
@@ -43,7 +41,9 @@ export function DefinitionPanel({
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.card} accessibilityLabel={`Definition of ${title}`}>
+      <FrostedPanel
+        accessibilityLabel={`Definition of ${title}`}
+        style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={2}>
             {title}
@@ -67,7 +67,7 @@ export function DefinitionPanel({
 
         {status === 'loading' && !showDefinition ? (
           <View style={styles.centered}>
-            <ActivityIndicator color={theme.accent} />
+            <ActivityIndicator color={chrome.accent} />
             <Text style={styles.meta}>Looking up…</Text>
           </View>
         ) : null}
@@ -105,12 +105,12 @@ export function DefinitionPanel({
             ))}
           </ScrollView>
         ) : null}
-      </View>
+      </FrostedPanel>
     </View>
   );
 }
 
-function createStyles(theme: Theme) {
+function createStyles() {
   return StyleSheet.create({
     wrapper: {
       alignSelf: 'stretch',
@@ -125,13 +125,12 @@ function createStyles(theme: Theme) {
       maxWidth: PANEL_SOFT_MAX_WIDTH,
       padding: 14,
       borderRadius: 12,
-      backgroundColor: theme.pageSurface,
       borderWidth: 1,
-      borderColor: theme.inputBorder,
-      shadowColor: theme.shadow,
-      shadowOpacity: 0.1,
-      shadowRadius: 12,
-      shadowOffset: {width: 0, height: 2},
+      borderColor: chrome.inputBorder,
+      shadowColor: chrome.shadow,
+      shadowOpacity: 0.28,
+      shadowRadius: 16,
+      shadowOffset: {width: 0, height: 4},
       maxHeight: 420,
     },
     header: {
@@ -142,7 +141,7 @@ function createStyles(theme: Theme) {
     },
     title: {
       flex: 1,
-      color: theme.textPrimary,
+      color: chrome.textPrimary,
       fontSize: 20,
       fontWeight: '700',
       letterSpacing: -0.3,
@@ -153,19 +152,19 @@ function createStyles(theme: Theme) {
       borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.chipBg,
+      backgroundColor: chrome.chipBg,
     },
     closePressed: {
       opacity: 0.7,
     },
     closeLabel: {
-      color: theme.textSecondary,
+      color: chrome.textSecondary,
       fontSize: 13,
       fontWeight: '600',
     },
     phonetic: {
       marginTop: 4,
-      color: theme.textSecondary,
+      color: chrome.textSecondary,
       fontSize: 13,
     },
     centered: {
@@ -174,17 +173,17 @@ function createStyles(theme: Theme) {
       gap: 8,
     },
     meta: {
-      color: theme.textSecondary,
+      color: chrome.textSecondary,
       fontSize: 13,
     },
     metaInline: {
       marginTop: 8,
-      color: theme.textSecondary,
+      color: chrome.textSecondary,
       fontSize: 12,
     },
     error: {
       marginTop: 12,
-      color: theme.danger,
+      color: chrome.danger,
       fontSize: 14,
       lineHeight: 20,
     },
@@ -199,14 +198,14 @@ function createStyles(theme: Theme) {
       gap: 6,
     },
     pos: {
-      color: theme.accent,
+      color: chrome.accent,
       fontSize: 12,
       fontWeight: '600',
       fontStyle: 'italic',
       textTransform: 'lowercase',
     },
     definition: {
-      color: theme.textPrimary,
+      color: chrome.textPrimary,
       fontSize: 14,
       lineHeight: 20,
     },

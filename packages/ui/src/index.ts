@@ -17,6 +17,7 @@ export {EmptyState} from './EmptyState';
 export {ReaderShell} from './ReaderShell';
 export {DefinitionPanel} from './DefinitionPanel';
 export {AnnotationPanel} from './AnnotationPanel';
+export {FrostedPanel, frostedPanelChrome} from './FrostedPanel';
 export {FormFieldsPanel} from './FormFieldsPanel';
 export {AuthPanel} from './AuthPanel';
 export {PreferencesPanel} from './PreferencesPanel';

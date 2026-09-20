@@ -67,10 +67,16 @@ type FormAnalysisState = {
   clear: () => void;
 };
 
-/** Keep only text fields (checkboxes/radios/etc. deferred). */
-function toTextFieldsOnly(fields: DetectedFormField[]): DetectedFormField[] {
+/** Keep fillable write fields; drop checkbox/radio/dropdown for now. */
+function toFillableFields(fields: DetectedFormField[]): DetectedFormField[] {
   return fields
-    .filter(f => f.type === 'text' || f.type === 'unknown')
+    .filter(
+      f =>
+        f.type === 'text' ||
+        f.type === 'date' ||
+        f.type === 'signature' ||
+        f.type === 'unknown',
+    )
     .map(f => (f.type === 'unknown' ? {...f, type: 'text' as const} : f));
 }
 
@@ -78,7 +84,7 @@ function withSource(
   fields: DetectedFormField[],
   source: FormFieldSource,
 ): DetectedFormField[] {
-  return toTextFieldsOnly(
+  return toFillableFields(
     fields.map(f => ({...f, source: f.source ?? source})),
   );
 }

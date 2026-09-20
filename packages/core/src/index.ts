@@ -5,13 +5,17 @@ export {
   registerPickPdfFile,
   renamePdfFile,
   registerRenamePdfFile,
+  savePdfBytes,
+  registerSavePdfBytes,
   registerAnnotatePhrase,
   annotatePhrase,
 } from './filePicker';
 export type {
   PickedPdfFile,
+  SavedPdfFile,
   PickPdfFileFn,
   RenamePdfFileFn,
+  SavePdfBytesFn,
 } from './filePicker';
 export {useDocumentStore} from './store';
 export type {DocumentTab} from './store';

@@ -20,6 +20,12 @@ type FormFieldsPanelProps = {
   onSelectField: (id: string) => void;
 };
 
+function typeMetaLabel(type: DetectedFormField['type']): string {
+  if (type === 'date') return 'date';
+  if (type === 'signature') return 'signature';
+  return 'write area';
+}
+
 export function FormFieldsPanel({
   status,
   fields,
@@ -37,12 +43,12 @@ export function FormFieldsPanel({
   return (
     <View style={styles.wrapper}>
       <View style={styles.card}>
-        <Text style={styles.title}>Text fields</Text>
+        <Text style={styles.title}>Form fields</Text>
 
         {status === 'loading' ? (
           <View style={styles.centered}>
             <ActivityIndicator color={theme.accent} />
-            <Text style={styles.meta}>Finding text fields…</Text>
+            <Text style={styles.meta}>Finding form fields…</Text>
           </View>
         ) : null}
 
@@ -51,13 +57,13 @@ export function FormFieldsPanel({
         ) : null}
 
         {status === 'none' ? (
-          <Text style={styles.meta}>No text fields found</Text>
+          <Text style={styles.meta}>No form fields found</Text>
         ) : null}
 
         {status === 'ready' || fields.length > 0 ? (
           <>
             <Text style={styles.count}>
-              {fields.length} text field{fields.length === 1 ? '' : 's'}
+              {fields.length} field{fields.length === 1 ? '' : 's'}
               {status === 'loading' ? ' (refining…)' : ''}
             </Text>
             <ScrollView
@@ -81,7 +87,7 @@ export function FormFieldsPanel({
                         {field.name}
                       </Text>
                       <Text style={styles.fieldMeta}>
-                        p.{field.pageNumber} · write area
+                        p.{field.pageNumber} · {typeMetaLabel(field.type)}
                       </Text>
                     </View>
                   </Pressable>

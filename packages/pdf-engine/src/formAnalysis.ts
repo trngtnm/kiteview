@@ -38,6 +38,21 @@ function mapFieldType(field: PDFField): FormFieldType {
   return 'unknown';
 }
 
+function looksLikeDateFieldName(name: string): boolean {
+  const n = name.toLowerCase();
+  if (/signature/.test(n)) return false;
+  return (
+    /\bdate\b/.test(n) ||
+    /mm\s*dd\s*yyyy/.test(n) ||
+    /mmddyyyy/.test(n) ||
+    /expiration/.test(n) ||
+    /\bbirth\b/.test(n) ||
+    /rehire/.test(n) ||
+    /first\s*day\s*of\s*employment/.test(n) ||
+    /\bdob\b/.test(n)
+  );
+}
+
 type PageIndex = {
   pages: PDFPage[];
   /** Widget dict → page index, built once for O(1) fallback lookup. */
@@ -169,9 +184,12 @@ export async function analyzePdfForms(
 
     for (const field of fields) {
       const name = field.getName() || `field_${widgetIndex}`;
-      const type = mapFieldType(field);
-      // Text-only detection for now — skip checkboxes and other widgets.
-      if (type !== 'text') {
+      let type = mapFieldType(field);
+      // Fillable write fields only — skip checkboxes and other widgets.
+      if (type === 'text' && looksLikeDateFieldName(name)) {
+        type = 'date';
+      }
+      if (type !== 'text' && type !== 'date' && type !== 'signature') {
         continue;
       }
       let isReadOnly = false;

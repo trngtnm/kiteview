@@ -8,11 +8,16 @@
  */
 const PAGE_MAX_WIDTH = 820;
 
-export function buildPdfViewerHtml(pdfDataUri: string): string {
+export function buildPdfViewerHtml(
+  pdfDataUri: string,
+  colorScheme: 'light' | 'dark' = 'light',
+): string {
   const safeUri = pdfDataUri.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const scheme = colorScheme === 'dark' ? 'dark' : 'light';
+  const pageBg = scheme === 'dark' ? '#0F1218' : '#F5F5F7';
 
   return `<!DOCTYPE html>
-<html>
+<html data-scheme="${scheme}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -22,11 +27,15 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       margin: 0;
       padding: 0;
       width: 100%;
-      background: #F5F5F7;
+      background: ${pageBg};
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow-x: visible;
       overflow-y: auto;
       scrollbar-gutter: stable;
+    }
+    html[data-scheme="light"],
+    html[data-scheme="light"] body {
+      background: #F5F5F7;
     }
     html[data-scheme="dark"],
     html[data-scheme="dark"] body {
@@ -148,9 +157,15 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
     .pinnedNote.extended {
       width: 168px;
       max-width: 42%;
-      border-color: rgba(0, 113, 227, 0.55);
-      box-shadow: 0 2px 12px rgba(0, 113, 227, 0.18);
+      border-width: 2px;
+      border-color: #79AFFF;
+      box-shadow: 0 0 0 1px rgba(45, 127, 249, 0.2), 0 2px 12px rgba(45, 127, 249, 0.18);
       z-index: 6;
+    }
+    html[data-scheme="dark"] .pinnedNote.selected,
+    html[data-scheme="dark"] .pinnedNote.extended {
+      border-color: #3D6FB0;
+      box-shadow: 0 0 0 1px rgba(75, 145, 231, 0.28), 0 2px 14px rgba(0, 0, 0, 0.4);
     }
     .pinnedNote .pinPhrase {
       font: 600 11px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -582,7 +597,11 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
               e.preventDefault();
               selectedPinnedId = pin.id;
               schedulePaintPinnedAnnotations();
-              post({ type: 'pinnedAnnotationClick', id: pin.id });
+              post({
+                type: 'pinnedAnnotationClick',
+                id: pin.id,
+                source: 'highlight',
+              });
             });
             overlay.appendChild(hi);
 
@@ -611,9 +630,11 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
               onMouseDown: (e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                selectedPinnedId = pin.id;
-                schedulePaintPinnedAnnotations();
-                post({ type: 'pinnedAnnotationClick', id: pin.id });
+                post({
+                  type: 'pinnedAnnotationClick',
+                  id: pin.id,
+                  source: 'note',
+                });
               },
             });
           });
@@ -642,7 +663,7 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
             body,
             rectNorm: active.rectNorm,
             side: active.side,
-            selected: false,
+            selected: true,
             extended: true,
             pageW,
             pageH,
@@ -702,12 +723,18 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
               post({ type: 'formFieldClick', id: field.id });
             });
 
-            // Text-only magic rectangles: always a writable text input.
+            // Magic rectangles: text / date / signature write inputs.
             const value = fieldValues[field.id] ?? '';
             const input = document.createElement('input');
             input.type = 'text';
             input.value = value;
-            input.placeholder = '';
+            if (field.type === 'date') {
+              input.placeholder = 'mm/dd/yyyy';
+            } else if (field.type === 'signature') {
+              input.placeholder = 'Signature';
+            } else {
+              input.placeholder = '';
+            }
             input.autocomplete = 'off';
             input.spellcheck = false;
             input.addEventListener('input', (e) => {
@@ -755,6 +782,54 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
         .slice(0, 100);
     }
 
+    function looksLikeDateField(name) {
+      const n = String(name || '').toLowerCase();
+      if (!n) return false;
+      if (/signature/.test(n)) return false;
+      return (
+        /\\bdate\\b/.test(n) ||
+        /mm\\s*dd\\s*yyyy/.test(n) ||
+        /mmddyyyy/.test(n) ||
+        /expiration/.test(n) ||
+        /\\bbirth\\b/.test(n) ||
+        /rehire/.test(n) ||
+        /first\\s*day\\s*of\\s*employment/.test(n) ||
+        /dob\\b/.test(n)
+      );
+    }
+
+    function rectsOverlap(a, b, pad) {
+      const p = pad == null ? 0.01 : pad;
+      return !(
+        a.x + a.w - p <= b.x ||
+        b.x + b.w - p <= a.x ||
+        a.y + a.h - p <= b.y ||
+        b.y + b.h - p <= a.y
+      );
+    }
+
+    function rectIoULocal(a, b) {
+      const ax2 = a.x + a.w;
+      const ay2 = a.y + a.h;
+      const bx2 = b.x + b.w;
+      const by2 = b.y + b.h;
+      const ix = Math.max(0, Math.min(ax2, bx2) - Math.max(a.x, b.x));
+      const iy = Math.max(0, Math.min(ay2, by2) - Math.max(a.y, b.y));
+      const inter = ix * iy;
+      if (inter <= 0) return 0;
+      const union = a.w * a.h + b.w * b.h - inter;
+      return union > 0 ? inter / union : 0;
+    }
+
+    function overlapsExisting(candidate, existing) {
+      // Strict IoU only — wet-ink lines sit near (not on) name widgets below.
+      return existing.some(
+        (f) =>
+          f.pageNumber === candidate.pageNumber &&
+          rectIoULocal(f.rectNorm, candidate.rectNorm) >= 0.22,
+      );
+    }
+
     /**
      * Real AcroForm text widgets via pdf.js (works on encrypted LiveCycle
      * PDFs like Form I-9 where pdf-lib fails).
@@ -795,7 +870,9 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
           fields.push({
             id,
             name,
-            type: 'text',
+            type: looksLikeDateField(name) || looksLikeDateField(rawName)
+              ? 'date'
+              : 'text',
             pageNumber,
             rectNorm: {
               x: Math.max(0, Math.min(1, left / pageW)),
@@ -808,17 +885,82 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
           });
         }
       }
-      return fields;
+      const wetInk = await detectWetInkSignatureDateFields(fields);
+      return fields.concat(wetInk);
     }
 
-    function rectsOverlap(a, b, pad) {
-      const p = pad == null ? 0.01 : pad;
-      return !(
-        a.x + a.w - p <= b.x ||
-        b.x + b.w - p <= a.x ||
-        a.y + a.h - p <= b.y ||
-        b.y + b.h - p <= a.y
-      );
+    /**
+     * I-9-style wet-ink blanks: signature / Today's Date lines sit ABOVE the
+     * printed caption and have no AcroForm widgets.
+     */
+    async function detectWetInkSignatureDateFields(existing) {
+      const extras = [];
+      if (!pdfDoc) return extras;
+      let idx = 0;
+      for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
+        const page = await pdfDoc.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1 });
+        const textContent = await page.getTextContent();
+        const items = (textContent.items || []).filter(
+          (it) => it && typeof it.str === 'string' && it.str.trim(),
+        );
+        const labels = [];
+        for (let i = 0; i < items.length; i++) {
+          const str = String(items[i].str).trim();
+          const bounds = itemBounds(items[i], viewport);
+          if (/^Signature of\\b/i.test(str)) {
+            labels.push({ kind: 'signature', str, bounds });
+          } else if (/^Today'?s Date$/i.test(str)) {
+            labels.push({ kind: 'date', str, bounds });
+          }
+        }
+
+        for (let i = 0; i < labels.length; i++) {
+          const label = labels[i];
+          const b = label.bounds;
+          const lineH = Math.max(0.016, Math.min(0.022, b.h * 1.2 || 0.02));
+          // Sit on the underline: nudge down onto the write band above the caption.
+          const y = Math.max(0.01, b.y - lineH + 0.02);
+          let x = Math.max(0.04, b.x);
+          let w;
+
+          if (label.kind === 'signature') {
+            // Clip before a same-row Today's Date caption when present.
+            let right = 0.58;
+            for (let j = 0; j < labels.length; j++) {
+              const other = labels[j];
+              if (other.kind !== 'date') continue;
+              const midY = b.y + b.h / 2;
+              const otherMid = other.bounds.y + other.bounds.h / 2;
+              if (Math.abs(midY - otherMid) > 0.025) continue;
+              if (other.bounds.x > b.x + 0.08) {
+                right = Math.min(right, other.bounds.x - 0.02);
+              }
+            }
+            w = Math.max(0.12, right - x);
+          } else {
+            w = Math.max(0.1, Math.min(0.92, 0.94) - x);
+          }
+
+          const candidate = {
+            id: 'wet_' + label.kind + '_' + pageNumber + '_' + idx,
+            name: cleanLabel(label.str) || (label.kind === 'signature' ? 'Signature' : "Today's Date"),
+            type: label.kind === 'signature' ? 'signature' : 'date',
+            pageNumber,
+            rectNorm: {
+              x,
+              y,
+              w: Math.min(0.9, w),
+              h: lineH,
+            },
+            source: 'heuristic',
+          };
+          idx += 1;
+          if (overlapsExisting(candidate, existing.concat(extras))) continue;
+          extras.push(candidate);
+        }
+      }
+      return extras;
     }
 
     /**
@@ -1240,6 +1382,14 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       schedulePaintFormOverlays();
     };
 
+    window.__kvSetFieldValues = function (values) {
+      if (!values || typeof values !== 'object') return;
+      Object.keys(values).forEach(function (id) {
+        fieldValues[id] = values[id] == null ? '' : String(values[id]);
+      });
+      schedulePaintFormOverlays();
+    };
+
     window.__kvRunHeuristicDetect = function () {
       try {
         const fields = detectHeuristicFields();
@@ -1305,6 +1455,77 @@ export function buildPdfViewerHtml(pdfDataUri: string): string {
       } catch (err) {
         post({
           type: 'formPageImages',
+          pages: [],
+          message: String(err && err.message ? err.message : err),
+        });
+      }
+    };
+
+    window.__kvExportFilledPages = async function () {
+      try {
+        const pages = [];
+        const sortedNums = Array.from(pageEls.keys()).sort(function (a, b) {
+          return a - b;
+        });
+        for (let i = 0; i < sortedNums.length; i++) {
+          const n = sortedNums[i];
+          const pageEl = pageEls.get(n);
+          if (!pageEl) continue;
+          const canvas = pageEl.querySelector('canvas');
+          if (!canvas) continue;
+          const srcW = canvas.width;
+          const srcH = canvas.height;
+          if (!srcW || !srcH) continue;
+
+          const tmp = document.createElement('canvas');
+          tmp.width = srcW;
+          tmp.height = srcH;
+          const ctx = tmp.getContext('2d');
+          ctx.drawImage(canvas, 0, 0);
+
+          formFields
+            .filter(function (f) {
+              return f.pageNumber === n;
+            })
+            .forEach(function (field) {
+              const raw = fieldValues[field.id];
+              const text = raw == null ? '' : String(raw).trim();
+              if (!text) return;
+              const r = field.rectNorm || {};
+              const boxX = (r.x || 0) * srcW;
+              const boxY = (r.y || 0) * srcH;
+              const boxW = Math.max(8, (r.w || 0) * srcW);
+              const boxH = Math.max(8, (r.h || 0) * srcH);
+              const fontPx = Math.max(9, Math.min(22, boxH * 0.7));
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(boxX, boxY, boxW, boxH);
+              ctx.clip();
+              ctx.fillStyle = '#1d1d1f';
+              ctx.textBaseline = 'middle';
+              ctx.textAlign = 'left';
+              ctx.font =
+                fontPx +
+                'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+              const padX = Math.max(2, boxH * 0.12);
+              ctx.fillText(text, boxX + padX, boxY + boxH / 2, boxW - padX * 2);
+              ctx.restore();
+            });
+
+          const dataUrl = tmp.toDataURL('image/jpeg', 0.92);
+          const comma = dataUrl.indexOf(',');
+          pages.push({
+            pageNumber: n,
+            imageBase64: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl,
+            mimeType: 'image/jpeg',
+            width: srcW,
+            height: srcH,
+          });
+        }
+        post({ type: 'filledPageImages', pages });
+      } catch (err) {
+        post({
+          type: 'filledPageImages',
           pages: [],
           message: String(err && err.message ? err.message : err),
         });
